@@ -4,6 +4,13 @@ import { estimateCycleWindow, phaseForDate, type CyclePhaseName } from "../../do
 import { estimatePhaseConfidence } from "../../domain/cycle/phaseConfidence";
 import { parseIsoDate } from "../../domain/dateUtils";
 import type { Cycle } from "../../storage/schemas/cycle";
+import type { ConfidenceTier, CyclePhaseConfidence } from "../../domain/models/common";
+
+function toConfidenceTier(confidence: CyclePhaseConfidence): ConfidenceTier {
+  if (confidence === "high") return "high";
+  if (confidence === "medium") return "moderate";
+  return "low";
+}
 
 function average(values: number[]): number {
   return values.reduce((sum, v) => sum + v, 0) / values.length;
@@ -66,7 +73,7 @@ export async function recomputeCycles(): Promise<Cycle[]> {
       estimatedOvulationDate: {
         name: "estimatedOvulationDate",
         value: window.estimatedOvulationDate,
-        confidence,
+        confidence: toConfidenceTier(confidence),
         sources: ["menstrualCycleEntries"],
         algorithmVersion: "phase-estimation.v1",
         computedAt: new Date().toISOString(),
