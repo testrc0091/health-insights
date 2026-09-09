@@ -22,8 +22,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-      - run: npm ci
+      # `npm ci` requires a committed package-lock.json, which this repo doesn't have
+      # yet (no one has run `npm install` anywhere so far). `npm install` works
+      # without one. Once a lockfile is generated and committed, switch this back to
+      # `npm ci` (and restore `cache: "npm"` above) for faster, fully reproducible
+      # builds.
+      - run: npm install
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
@@ -39,8 +43,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-      - run: npm ci
+      - run: npm install
       # Repo name -> Pages subpath. If you rename the GitHub repo, update this line
       # (and the fallback in vite.config.ts) to match.
       - run: npm run build
