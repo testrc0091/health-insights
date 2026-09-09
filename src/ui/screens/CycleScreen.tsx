@@ -269,10 +269,12 @@ export function CycleScreen() {
 
   const cycleChartRows = useMemo(() => {
     if (!cycleChartSeries) return [];
-    const byDay = new Map<number, Record<string, number>>();
+    type ChartRow = { cycleDay: number; [cycleStartDate: string]: number };
+    const byDay = new Map<number, ChartRow>();
     for (const { cycle, points } of cycleChartSeries) {
       for (const point of points) {
-        const row: Record<string, number> = byDay.get(point.cycleDay) ?? { cycleDay: point.cycleDay };
+        const row: ChartRow = byDay.get(point.cycleDay) ?? { cycleDay: point.cycleDay };
+    
         row[cycle.startDate] = point.value;
         byDay.set(point.cycleDay, row);
       }
