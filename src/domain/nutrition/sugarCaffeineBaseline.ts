@@ -51,8 +51,9 @@ export function flagUnusualIntakeDays(
     const todayValue = today[metric];
     const isUnusuallyHigh =
       values.length >= 2 &&
-      stdDev > MIN_STD_DEV_FOR_FLAGGING &&
-      todayValue > mean + HIGH_THRESHOLD_STD_DEVS * stdDev;
+      (stdDev > MIN_STD_DEV_FOR_FLAGGING
+        ? todayValue > mean + HIGH_THRESHOLD_STD_DEVS * stdDev
+        : todayValue > mean * FLAT_HISTORY_RELATIVE_THRESHOLD + FLAT_HISTORY_ABSOLUTE_MARGIN);
 
     return {
       metric,
