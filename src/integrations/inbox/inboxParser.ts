@@ -45,10 +45,9 @@ function matchedDomains(text: string): InboxDomain[] {
  */
 export function splitInboxText(rawText: string): InboxSegment[] {
   const clauses = rawText
-    .split(/[.,]/)
+    .split(/,|\.(?!\d)/)
     .map((c) => c.trim())
     .filter((c) => c.length > 0);
-
   const segments: InboxSegment[] = [];
 
   for (const clause of clauses) {
