@@ -24,7 +24,9 @@ export interface BaselineFlag {
 
 const BASELINE_WINDOW_DAYS = 21;
 const HIGH_THRESHOLD_STD_DEVS = 1.5;
-const MIN_STD_DEV_FOR_FLAGGING = 0.0001; // guard against flagging noise on a flat/zero history
+const MIN_STD_DEV_FOR_FLAGGING = 0.0001;
+const FLAT_HISTORY_RELATIVE_THRESHOLD = 1.5;
+const FLAT_HISTORY_ABSOLUTE_MARGIN = 10;
 const METRICS: SugarCaffeineMetric[] = ["addedSugarG", "totalSugarG", "caffeineMg"];
 
 /**
