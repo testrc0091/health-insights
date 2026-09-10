@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { getUserProfileOrDefault, userProfileRepository } from "../storage/repositories";
 import { DEFAULT_USER_PROFILE, type UserProfile } from "../storage/schemas/userProfile";
-import { seedDemoDataIfEmpty } from "./seedData";
 
 interface AppContextValue {
   userProfile: UserProfile;
@@ -22,11 +21,7 @@ const AppContext = createContext<AppContextValue | null>(null);
  * screen has something real to show on first load.
  */
 export function AppProviders({ children }: { children: ReactNode }) {
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    seedDemoDataIfEmpty().finally(() => setIsReady(true));
-  }, []);
+  const [isReady] = useState(true);
 
   const liveProfile = useLiveQuery(() => getUserProfileOrDefault(), []);
 
