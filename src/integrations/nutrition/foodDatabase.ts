@@ -73,7 +73,7 @@ export const FOOD_DATABASE: FoodDatabaseEntry[] = [
   { name: "pork chop", aliases: ["pork chop", "pork"], servingDescription: "100g cooked", calories: 231, proteinG: 26.6, carbsG: 0, fatG: 13.2, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
   { name: "turkey breast", aliases: ["turkey breast", "turkey"], servingDescription: "100g cooked", calories: 135, proteinG: 30, carbsG: 0, fatG: 0.7, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
   { name: "bacon", aliases: ["bacon"], servingDescription: "2 slices cooked (16g)", calories: 86, proteinG: 5.9, carbsG: 0.2, fatG: 6.7, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
-  { name: "egg", aliases: ["egg", "eggs"], servingDescription: "1 large", calories: 72, proteinG: 6.3, carbsG: 0.4, fatG: 4.8, fiberG: 0, addedSugarG: 0, totalSugarG: 0.2, caffeineMg: 0, confidence: "high" },
+  { name: "egg", aliases: ["egg", "eggs"], servingDescription: "1 large (50g)", ... calories: 72, proteinG: 6.3, carbsG: 0.4, fatG: 4.8, fiberG: 0, addedSugarG: 0, totalSugarG: 0.2, caffeineMg: 0, confidence: "high" },
   { name: "egg white", aliases: ["egg white", "egg whites"], servingDescription: "1 large (33g)", calories: 17, proteinG: 3.6, carbsG: 0.2, fatG: 0.1, fiberG: 0, addedSugarG: 0, totalSugarG: 0.2, caffeineMg: 0, confidence: "high" },
   { name: "tofu", aliases: ["tofu"], servingDescription: "100g firm", calories: 76, proteinG: 8, carbsG: 1.9, fatG: 4.8, fiberG: 0.3, addedSugarG: 0, totalSugarG: 0.6, caffeineMg: 0, confidence: "high" },
 
@@ -125,19 +125,19 @@ export const FOOD_DATABASE: FoodDatabaseEntry[] = [
 
   // --- Packaged / prepared ---
   { name: "donut", aliases: ["donut", "doughnut"], servingDescription: "1 glazed (60g)", calories: 240, proteinG: 3, carbsG: 27, fatG: 14, fiberG: 0.7, addedSugarG: 12, totalSugarG: 12, caffeineMg: 0, confidence: "medium" },
-  { name: "protein shake", aliases: ["protein shake", "whey shake"], servingDescription: "1 scoop in water", calories: 120, proteinG: 24, carbsG: 3, fatG: 1.5, fiberG: 0, addedSugarG: 1, totalSugarG: 2, caffeineMg: 0, confidence: "medium" },
+  { name: "protein shake", ..., servingDescription: "1 scoop in 8 fl oz water (240ml)", calories: 120, proteinG: 24, carbsG: 3, fatG: 1.5, fiberG: 0, addedSugarG: 1, totalSugarG: 2, caffeineMg: 0, confidence: "medium" },
   { name: "protein bar", aliases: ["protein bar"], servingDescription: "1 bar (60g)", calories: 220, proteinG: 20, carbsG: 24, fatG: 8, fiberG: 5, addedSugarG: 5, totalSugarG: 6, caffeineMg: 0, confidence: "medium" },
   { name: "granola bar", aliases: ["granola bar"], servingDescription: "1 bar (24g)", calories: 100, proteinG: 2, carbsG: 16, fatG: 4, fiberG: 1, addedSugarG: 6, totalSugarG: 7, caffeineMg: 0, confidence: "medium" },
   { name: "potato chips", aliases: ["potato chips", "chips"], servingDescription: "1 oz (28g)", calories: 152, proteinG: 2, carbsG: 15, fatG: 10, fiberG: 1.2, addedSugarG: 0, totalSugarG: 0.1, caffeineMg: 0, confidence: "medium" },
   { name: "pretzels", aliases: ["pretzels"], servingDescription: "1 oz (28g)", calories: 108, proteinG: 2.6, carbsG: 22.5, fatG: 1, fiberG: 0.9, addedSugarG: 0.5, totalSugarG: 0.9, caffeineMg: 0, confidence: "medium" },
   { name: "cheese pizza", aliases: ["pizza"], servingDescription: "1 slice (107g)", calories: 285, proteinG: 12.2, carbsG: 35.7, fatG: 10.4, fiberG: 2.3, addedSugarG: 3, totalSugarG: 3.8, caffeineMg: 0, confidence: "medium" },
-  { name: "hamburger", aliases: ["hamburger", "burger"], servingDescription: "1 fast-food sandwich", calories: 250, proteinG: 12, carbsG: 31, fatG: 9, fiberG: 1.5, addedSugarG: 5, totalSugarG: 6, caffeineMg: 0, confidence: "medium" },
+  { name: "hamburger", ..., servingDescription: "1 fast-food sandwich (110g)", calories: 250, proteinG: 12, carbsG: 31, fatG: 9, fiberG: 1.5, addedSugarG: 5, totalSugarG: 6, caffeineMg: 0, confidence: "medium" },
   { name: "french fries", aliases: ["french fries", "fries"], servingDescription: "1 medium fast-food serving (117g)", calories: 365, proteinG: 4, carbsG: 48, fatG: 17, fiberG: 4.4, addedSugarG: 0, totalSugarG: 0.2, caffeineMg: 0, confidence: "medium" },
   { name: "ice cream", aliases: ["ice cream"], servingDescription: "1/2 cup (66g) vanilla", calories: 137, proteinG: 2.3, carbsG: 15.6, fatG: 7.3, fiberG: 0.5, addedSugarG: 14, totalSugarG: 14, caffeineMg: 0, confidence: "medium" },
   { name: "chocolate chip cookie", aliases: ["chocolate chip cookie", "cookie"], servingDescription: "1 medium (16g)", calories: 78, proteinG: 0.9, carbsG: 9.6, fatG: 4.5, fiberG: 0.4, addedSugarG: 5, totalSugarG: 5.3, caffeineMg: 0, confidence: "medium" },
   { name: "dark chocolate", aliases: ["dark chocolate"], servingDescription: "1 oz (28g)", calories: 155, proteinG: 2.2, carbsG: 13, fatG: 11, fiberG: 3.1, addedSugarG: 6.8, totalSugarG: 6.8, caffeineMg: 12, confidence: "medium" },
   { name: "hummus", aliases: ["hummus"], servingDescription: "2 tbsp (30g)", calories: 70, proteinG: 2, carbsG: 6, fatG: 4.5, fiberG: 2, addedSugarG: 0, totalSugarG: 0.5, caffeineMg: 0, confidence: "medium" },
-  { name: "turkey sandwich", aliases: ["turkey sandwich"], servingDescription: "1 deli sandwich", calories: 320, proteinG: 24, carbsG: 34, fatG: 10, fiberG: 3, addedSugarG: 3, totalSugarG: 5, caffeineMg: 0, confidence: "medium" },
+  { name: "turkey sandwich", ..., servingDescription: "1 deli sandwich (220g)", calories: 320, proteinG: 24, carbsG: 34, fatG: 10, fiberG: 3, addedSugarG: 3, totalSugarG: 5, caffeineMg: 0, confidence: "medium" },
   { name: "burrito", aliases: ["burrito"], servingDescription: "1 bean-and-cheese burrito (200g)", calories: 445, proteinG: 17, carbsG: 60, fatG: 15, fiberG: 8, addedSugarG: 0, totalSugarG: 2, caffeineMg: 0, confidence: "medium" },
   { name: "california roll", aliases: ["sushi", "california roll"], servingDescription: "8 pieces (166g)", calories: 255, proteinG: 9, carbsG: 38, fatG: 7, fiberG: 2, addedSugarG: 2, totalSugarG: 3, caffeineMg: 0, confidence: "medium" },
 ];
