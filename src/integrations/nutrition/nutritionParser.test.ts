@@ -49,4 +49,20 @@ describe("parseNutritionText", () => {
     const [doubled] = parseNutritionText("200 g chicken breast"); // reference is 100g cooked
     expect(doubled!.calories).toBeCloseTo(330, 0); // 2x chicken breast's 165 kcal reference
   });
+
+  it("shows the food's own standard serving when no quantity is typed at all", () => {
+    const items = parseNutritionText("rice, lentils, salmon, broccoli");
+    for (const item of items) {
+      // every item should carry SOME portion descriptor, not just the bare food name
+      expect(item.name.split(" ").length).toBeGreaterThan(1);
+    }
+    expect(items.find((i) => i.name.includes("salmon"))!.name).toContain("100g");
+    expect(items.find((i) => i.name.includes("rice"))!.name).toContain("cup");
+  });
+
+  it("does not repeat the food name when the standard-serving label already contains it", () => {
+    const [burrito] = parseNutritionText("burrito");
+    const occurrences = burrito!.name.toLowerCase().split("burrito").length - 1;
+    expect(occurrences).toBe(1);
+  });
 });
