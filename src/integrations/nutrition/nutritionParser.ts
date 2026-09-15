@@ -248,8 +248,38 @@ function extractQuantity(segment: string): { quantity: number; unit: string | nu
   return { quantity: 1, unit: null, remainderText: trimmed };
 }
 
-function parseOneSegment(segment: string): ParsedFoodItem {
-  const { quantity, unit, remainderText } = extractQuantity(segment);
+/** Derives a human-readable serving label from a food's own servingDescription (e.g.
+ * "1 cup cooked (158g)" → "1 cup cooked", "100g cooked" → "100g cooked", "1 large
+ * (50g)" → "1 large") — used so a bare food name with no typed quantity still shows
+ * SOME portion descriptor instead of none at all. Stops at the first parenthetical or
+ * comma, since those introduce secondary detail ("(158g)", ", 85% lean") not needed
+ * in a short label. */
+function describeStandardServing(servingDescription: string): string {
+  const parenIndex = servingDescription.indexOf("(");
+  if (parenIndex >= 0) return servingDescription.slice(0, parenIndex).trim();
+  const commaIndex = servingDescription.indexOf(",");
+  if (commaIndex >= 0) return servingDescription.slice(0, commaIndex).trim();
+  return servingDescription.trim();
+}
+
+/** Combines a serving/quantity label with the food's name, e.g. "1 cup cooked" +
+ * "white rice" → "1 cup cooked white rice". If the label's last word already appears
+ * in the name (e.g. label "1 bean-and-cheese burrito" + name "burrito", or label
+ * "1 deli sandwich" + name "turkey sandwich"), that trailing word is dropped from the
+ * label first so the result doesn't repeat itself ("1 bean-and-cheese burrito", not
+ * "1 bean-and-cheese burrito burrito"). */
+function combineLabelAndName(label: string, name: string): string {
+  const labelWords = label.split(" ");
+  const lastWord = labelWords[labelWords.length - 1]!.toLowerCase();
+  const nameWords = name.toLowerCase().split(" ");
+  if (nameWords.includes(lastWord)) {
+    const trimmedLabel = labelWords.slice(0, -1).join(" ").trim();
+    return trimmedLabel ? `${trimmedLabel} ${name}` : name;
+  }
+  return `${label} ${name}`;
+}
+
+function parseOneSegment(segment: string): ParsedFoodItem {  const { quantity, unit, remainderText } = extractQuantity(segment);
   const { matchText, modifierSuffix } = resolveModifierForMatching(remainderText);
   const match = findFoodMatch(matchText);
 
@@ -277,13 +307,16 @@ function parseOneSegment(segment: string): ParsedFoodItem {
   const rangeWidth = match.confidence === "high" ? 0.08 : 0.2;
 
   // Echo the real unit the user typed ("12 oz coffee") rather than a bare portion
-  // count, and keep the plain-count style ("2 banana") when no unit was given.
+  // count, keep the plain-count style ("2 banana") when a count was given but no
+  // unit, and otherwise (nothing typed at all — just "salmon") fall back to the
+  // food's own standard serving ("100g cooked salmon") rather than showing no
+  // portion descriptor whatsoever.
   const quantityLabel = unit
     ? `${formatQuantity(quantity)} ${unit}`
     : quantity !== 1
       ? formatQuantity(quantity)
-      : null;
-  const baseName = quantityLabel ? `${quantityLabel} ${match.name}` : match.name;
+      : describeStandardServing(match.servingDescription);
+  const baseName = combineLabelAndName(quantityLabel, match.name);
   const name = modifierSuffix ? `${baseName} with ${modifierSuffix}` : baseName;
 
   return {
