@@ -49,6 +49,10 @@ function extractQuantity(segment: string): { quantity: number; remainderText: st
   return { quantity: 1, remainderText: trimmed };
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function findFoodMatch(text: string): FoodDatabaseEntry | null {
   const normalized = text.toLowerCase().trim();
   const candidates = FOOD_DATABASE.flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias })));
@@ -56,7 +60,13 @@ function findFoodMatch(text: string): FoodDatabaseEntry | null {
   // wins over a shorter one ("yogurt") that would otherwise match the same text.
   candidates.sort((a, b) => b.alias.length - a.alias.length);
   for (const { entry, alias } of candidates) {
-    if (normalized.includes(alias)) return entry;
+    // Whole-word match, not a bare substring check — otherwise short aliases false-
+    // match inside unrelated words ("tea" inside "steak"/"steamed", "corn" inside
+    // "popcorn", "egg" inside "eggplant"). A trailing e?s? tolerates common English
+    // plurals ("banana"/"bananas", "tomato"/"tomatoes") without listing every one as
+    // a separate alias.
+    const pattern = new RegExp(`\\b${escapeRegExp(alias)}e?s?\\b`, "i");
+    if (pattern.test(normalized)) return entry;
   }
   return null;
 }
@@ -104,7 +114,12 @@ export function parseNutritionText(rawText: string): ParsedFoodItem[] {
       };
     }
 
-    const rangeWidth = 0.1; // matched foods get a tighter +/-10% range, not a bare number
+      // Single-ingredient foods (chicken breast, an apple) vary little from the USDA
+    // reference value, so they get a tight range; composite/branded foods (a
+    // burrito, a protein bar) vary a lot by recipe/brand, so they get a wider one —
+    // and the item's own confidence tier reflects that difference, not a flat
+    // "medium" for every database match regardless of how reliable it actually is.
+    const rangeWidth = match.confidence === "high" ? 0.08 : 0.2;
     return {
       name: quantity === 1 ? match.name : `${formatQuantity(quantity)} ${match.name}`,
       calories: round(match.calories * quantity),
@@ -117,7 +132,7 @@ export function parseNutritionText(rawText: string): ParsedFoodItem[] {
       addedSugarG: match.addedSugarG != null ? round(match.addedSugarG * quantity) : null,
       totalSugarG: match.totalSugarG != null ? round(match.totalSugarG * quantity) : null,
       caffeineMg: match.caffeineMg != null ? round(match.caffeineMg * quantity) : null,
-      confidence: "medium",
+      confidence: match.confidence,
     };
   });
 }
