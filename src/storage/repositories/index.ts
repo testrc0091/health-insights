@@ -10,6 +10,7 @@ import { skinEntrySchema, skincareChangeSchema } from "../schemas/skin";
 import { menstrualCycleEntrySchema, cycleSchema } from "../schemas/cycle";
 import { insightSchema, weeklyReportSchema } from "../schemas/derived";
 import { photoBlobSchema } from "../schemas/photoBlob";
+import { customFoodSchema } from "../schemas/customFood";
 
 export const userProfileRepository = createRepository(db.userProfile, userProfileSchema);
 export const dailyMetricsRepository = createRepository(db.dailyMetrics, dailyMetricsSchema);
@@ -28,6 +29,7 @@ export const cycleRepository = createRepository(db.cycles, cycleSchema);
 export const insightRepository = createRepository(db.insights, insightSchema);
 export const weeklyReportRepository = createRepository(db.weeklyReports, weeklyReportSchema);
 export const photoBlobRepository = createRepository(db.photoBlobs, photoBlobSchema);
+export const customFoodRepository = createRepository(db.customFoods, customFoodSchema);
 
 /** Almost every screen needs "the current profile, or sensible defaults if onboarding
  * hasn't run yet" rather than an undefined check at every call site. */
