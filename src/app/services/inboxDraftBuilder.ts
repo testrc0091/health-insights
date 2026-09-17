@@ -1,6 +1,7 @@
 import { v4 as uuid } from "uuid";
 import { toIsoDate } from "../../domain/dateUtils";
 import { parseNutritionText } from "../../integrations/nutrition/nutritionParser";
+import type { FoodDatabaseEntry } from "../../integrations/nutrition/foodDatabase";
 import type { InboxSegment } from "../../integrations/inbox/inboxParser";
 import type { Workout } from "../../storage/schemas/workout";
 import type { ParsedFoodItem } from "../../storage/schemas/nutrition";
@@ -73,8 +74,8 @@ function guessBleeding(text: string): MenstrualCycleEntry["bleeding"] {
   return "medium";
 }
 
-function buildFoodDraft(segment: InboxSegment): InboxDraft {
-  return { kind: "food", rawText: segment.text, items: parseNutritionText(segment.text) };
+function buildFoodDraft(segment: InboxSegment, customEntries: FoodDatabaseEntry[]): InboxDraft {
+  return { kind: "food", rawText: segment.text, items: parseNutritionText(segment.text, customEntries) };
 }
 
 function buildWorkoutDraft(segment: InboxSegment): InboxDraft {
@@ -148,12 +149,16 @@ function buildCycleDraft(segment: InboxSegment): InboxDraft {
  * no repository writes happen here. The screen layer shows every draft on one
  * confirmation view and only persists them once the user explicitly confirms
  * (brief's "never auto-commit a multi-domain parse" rule).
+ *
+ * `customFoods` — the user's own added/edited foods, loaded by the caller from
+ * IndexedDB — are passed straight through to parseNutritionText so a food draft here
+ * benefits from the same custom entries/overrides as the Nutrition screen's quick-add.
  */
-export function buildDraftsFromSegments(segments: InboxSegment[]): InboxDraft[] {
+export function buildDraftsFromSegments(segments: InboxSegment[], customFoods: FoodDatabaseEntry[] = []): InboxDraft[] {
   return segments.map((segment): InboxDraft => {
     switch (segment.domain) {
       case "food":
-        return buildFoodDraft(segment);
+        return buildFoodDraft(segment, customFoods);
       case "workout":
         return buildWorkoutDraft(segment);
       case "symptom":
