@@ -176,9 +176,12 @@ describe("parseNutritionText", () => {
     expect(quarterCup!.calorieRangeHigh).toBeGreaterThan(quarterCup!.calories);
   });
 
-  it("keeps normal high confidence for a same-dimension unit conversion that actually works", () => {
+  it("keeps the food's own confidence tier for a same-dimension unit conversion that actually works", () => {
+    // Red wine's baseline confidence is "medium" (a composite/branded category, not a
+    // dimension-mismatch downgrade) - this proves a real, working unit conversion
+    // passes that baseline through unchanged rather than forcing a tier either way.
     const [wine] = parseNutritionText("5 fl oz red wine");
-    expect(wine!.confidence).toBe("high");
+    expect(wine!.confidence).toBe("medium");
   });
 
   it("does not falsely flag a spelled-out unit as a mismatch against its own abbreviation", () => {
