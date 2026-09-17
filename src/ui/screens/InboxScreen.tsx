@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
 import { v4 as uuid } from "uuid";
 import { Card } from "../components/Card";
 import { PageHeader } from "../components/PageHeader";
@@ -10,6 +11,7 @@ import {
   workoutRepository,
   symptomEntryRepository,
   menstrualCycleEntryRepository,
+  customFoodRepository,
 } from "../../storage/repositories";
 import { recomputeCycles } from "../../app/services/cycleService";
 import type { ParsedFoodItem } from "../../storage/schemas/nutrition";
@@ -42,11 +44,13 @@ export function InboxScreen() {
   const [drafts, setDrafts] = useState<InboxDraft[] | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
+  const customFoods = useLiveQuery(() => customFoodRepository.getAll(), []);
+
   function handleParse() {
     const text = inboxText.trim();
     if (!text) return;
     const segments = splitInboxText(text);
-    setDrafts(buildDraftsFromSegments(segments));
+    setDrafts(buildDraftsFromSegments(segments, customFoods ?? []));
     setSavedMessage(null);
   }
 
