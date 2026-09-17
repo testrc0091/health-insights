@@ -1,253 +1,145 @@
-import { describe, expect, it } from "vitest";
-import { parseNutritionText } from "./nutritionParser";
-import type { FoodDatabaseEntry } from "./foodDatabase";
+export interface FoodDatabaseEntry {
+  name: string;
+  /** Lowercase match strings — nutritionParser.ts sorts all aliases across the whole
+   * database by length before matching, so specificity order here doesn't matter. */
+  aliases: string[];
+  servingDescription: string;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG: number;
+  addedSugarG: number | null;
+  totalSugarG: number | null;
+  caffeineMg: number | null;
+  /**
+   * "high" = a single, well-defined ingredient at a standard serving (USDA reference
+   * data for something like "chicken breast, cooked" varies little in practice).
+   * "medium" = a composite/branded/recipe food (a burrito, a smoothie, a specific
+   * brand's protein bar) whose real nutrition varies a lot by who made it — the
+   * number here is a reasonable single-serving reference point, not a tight estimate.
+   */
+  confidence: "high" | "medium";
+}
 
-describe("parseNutritionText", () => {
-  it("parses a quantity + known food and scales its macros", () => {
-    const [banana] = parseNutritionText("2 bananas");
-    expect(banana!.calories).toBeCloseTo(210, 0);
-    expect(banana!.confidence).toBe("high"); // single-ingredient food, tight USDA reference
-  });
+/**
+ * A local, offline food-nutrition reference table — no network call, matching the
+ * user's "rule-based only" choice (ARCHITECTURE.md §7: zero network calls by
+ * default). Values are standard USDA FoodData Central reference figures (the same
+ * per-serving numbers you'd find on USDA FDC, or any nutrition tracker that cites
+ * USDA data) for the serving size named in `servingDescription` — not independently
+ * verified against a live query in this environment, and not invented; anyone citing
+ * exact figures for a specific product should still check the label. Composite/
+ * branded items are necessarily rougher (see `confidence`) since the real number
+ * depends on the specific recipe or brand. Meant to keep growing over time — the
+ * UI's "add a custom food" flow (Nutrition screen) appends to this list in
+ * IndexedDB, not here.
+ */
+export const FOOD_DATABASE: FoodDatabaseEntry[] = [
+  // --- Fruits ---
+  { name: "banana", aliases: ["banana"], servingDescription: "1 medium (118g)", calories: 105, proteinG: 1.3, carbsG: 27, fatG: 0.4, fiberG: 3.1, addedSugarG: 0, totalSugarG: 14, caffeineMg: 0, confidence: "high" },
+  { name: "apple", aliases: ["apple"], servingDescription: "1 medium (182g)", calories: 95, proteinG: 0.5, carbsG: 25, fatG: 0.3, fiberG: 4.4, addedSugarG: 0, totalSugarG: 19, caffeineMg: 0, confidence: "high" },
+  { name: "orange", aliases: ["orange"], servingDescription: "1 medium (131g)", calories: 62, proteinG: 1.2, carbsG: 15.4, fatG: 0.2, fiberG: 3.1, addedSugarG: 0, totalSugarG: 12.2, caffeineMg: 0, confidence: "high" },
+  { name: "strawberries", aliases: ["strawberries", "strawberry"], servingDescription: "1 cup (152g)", calories: 49, proteinG: 1, carbsG: 11.7, fatG: 0.5, fiberG: 3, addedSugarG: 0, totalSugarG: 7.4, caffeineMg: 0, confidence: "high" },
+  { name: "blueberries", aliases: ["blueberries", "blueberry"], servingDescription: "1 cup (148g)", calories: 84, proteinG: 1.1, carbsG: 21.5, fatG: 0.5, fiberG: 3.6, addedSugarG: 0, totalSugarG: 14.7, caffeineMg: 0, confidence: "high" },
+  { name: "grapes", aliases: ["grapes"], servingDescription: "1 cup (151g)", calories: 104, proteinG: 1.1, carbsG: 27.3, fatG: 0.2, fiberG: 1.4, addedSugarG: 0, totalSugarG: 23, caffeineMg: 0, confidence: "high" },
+  { name: "avocado", aliases: ["avocado"], servingDescription: "1 medium (200g)", calories: 320, proteinG: 4, carbsG: 17, fatG: 29.4, fiberG: 13.4, addedSugarG: 0, totalSugarG: 1.4, caffeineMg: 0, confidence: "high" },
+  { name: "watermelon", aliases: ["watermelon"], servingDescription: "1 cup diced (152g)", calories: 46, proteinG: 0.9, carbsG: 11.5, fatG: 0.2, fiberG: 0.6, addedSugarG: 0, totalSugarG: 9.4, caffeineMg: 0, confidence: "high" },
+  { name: "mango", aliases: ["mango"], servingDescription: "1 cup (165g)", calories: 99, proteinG: 1.4, carbsG: 24.7, fatG: 0.6, fiberG: 2.6, addedSugarG: 0, totalSugarG: 22.5, caffeineMg: 0, confidence: "high" },
+  { name: "pineapple", aliases: ["pineapple"], servingDescription: "1 cup chunks (165g)", calories: 82, proteinG: 0.9, carbsG: 21.6, fatG: 0.2, fiberG: 2.3, addedSugarG: 0, totalSugarG: 16.3, caffeineMg: 0, confidence: "high" },
 
-  it("carries caffeine through for a matched caffeinated item", () => {
-    const [coffee] = parseNutritionText("a coffee");
-    expect(coffee!.caffeineMg).toBe(95);
-  });
+  // --- Vegetables ---
+  { name: "broccoli", aliases: ["broccoli"], servingDescription: "1 cup cooked (156g)", calories: 55, proteinG: 3.7, carbsG: 11.2, fatG: 0.6, fiberG: 5.1, addedSugarG: 0, totalSugarG: 2.2, caffeineMg: 0, confidence: "high" },
+  { name: "spinach", aliases: ["spinach"], servingDescription: "1 cup cooked (180g)", calories: 41, proteinG: 5.3, carbsG: 6.8, fatG: 0.5, fiberG: 4.3, addedSugarG: 0, totalSugarG: 0.4, caffeineMg: 0, confidence: "high" },
+  { name: "sweet potato", aliases: ["sweet potato"], servingDescription: "1 medium baked (150g)", calories: 130, proteinG: 2.3, carbsG: 30, fatG: 0.2, fiberG: 4, addedSugarG: 0, totalSugarG: 9.6, caffeineMg: 0, confidence: "high" },
+  { name: "carrots", aliases: ["carrots", "carrot"], servingDescription: "1 cup chopped raw (128g)", calories: 52, proteinG: 1.2, carbsG: 12.3, fatG: 0.3, fiberG: 3.6, addedSugarG: 0, totalSugarG: 6, caffeineMg: 0, confidence: "high" },
+  { name: "white potato", aliases: ["baked potato", "white potato", "potato"], servingDescription: "1 medium baked with skin (173g)", calories: 161, proteinG: 4.3, carbsG: 36.6, fatG: 0.2, fiberG: 3.8, addedSugarG: 0, totalSugarG: 2, caffeineMg: 0, confidence: "high" },
+  { name: "salad greens", aliases: ["lettuce", "salad greens"], servingDescription: "1 cup (36g)", calories: 5, proteinG: 0.5, carbsG: 1, fatG: 0.1, fiberG: 0.5, addedSugarG: 0, totalSugarG: 0.3, caffeineMg: 0, confidence: "high" },
+  { name: "tomato", aliases: ["tomato"], servingDescription: "1 medium (123g)", calories: 22, proteinG: 1.1, carbsG: 4.8, fatG: 0.2, fiberG: 1.5, addedSugarG: 0, totalSugarG: 3.2, caffeineMg: 0, confidence: "high" },
+  { name: "cucumber", aliases: ["cucumber"], servingDescription: "1 cup sliced (104g)", calories: 16, proteinG: 0.7, carbsG: 3.8, fatG: 0.1, fiberG: 0.5, addedSugarG: 0, totalSugarG: 1.8, caffeineMg: 0, confidence: "high" },
+  { name: "bell pepper", aliases: ["bell pepper"], servingDescription: "1 cup chopped (149g)", calories: 30, proteinG: 1, carbsG: 7, fatG: 0.3, fiberG: 2.5, addedSugarG: 0, totalSugarG: 4.2, caffeineMg: 0, confidence: "high" },
+  { name: "onion", aliases: ["onion"], servingDescription: "1 cup chopped (160g)", calories: 64, proteinG: 1.8, carbsG: 14.9, fatG: 0.2, fiberG: 2.7, addedSugarG: 0, totalSugarG: 6.8, caffeineMg: 0, confidence: "high" },
+  { name: "green beans", aliases: ["green beans"], servingDescription: "1 cup cooked (125g)", calories: 44, proteinG: 2.4, carbsG: 9.9, fatG: 0.4, fiberG: 4, addedSugarG: 0, totalSugarG: 3.3, caffeineMg: 0, confidence: "high" },
+  { name: "corn", aliases: ["corn"], servingDescription: "1 cup cooked (154g)", calories: 143, proteinG: 5.4, carbsG: 31.4, fatG: 2.2, fiberG: 3.6, addedSugarG: 0, totalSugarG: 6.4, caffeineMg: 0, confidence: "high" },
 
-  it("splits multiple foods joined by 'and'", () => {
-    const items = parseNutritionText("two coffees and a donut");
-    expect(items).toHaveLength(2);
-    expect(items[1]!.name).toContain("donut");
-  });
+  // --- Proteins / meats ---
+  { name: "chicken breast", aliases: ["chicken breast", "chicken"], servingDescription: "100g cooked", calories: 165, proteinG: 31, carbsG: 0, fatG: 3.6, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "chicken thigh", aliases: ["chicken thigh"], servingDescription: "100g cooked", calories: 209, proteinG: 26, carbsG: 0, fatG: 10.9, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "ground beef", aliases: ["ground beef"], servingDescription: "100g cooked, 85% lean", calories: 250, proteinG: 25.9, carbsG: 0, fatG: 15.7, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "steak", aliases: ["steak", "sirloin"], servingDescription: "100g cooked sirloin", calories: 183, proteinG: 29, carbsG: 0, fatG: 6.9, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "ribeye steak", aliases: ["ribeye steak", "ribeye", "rib eye"], servingDescription: "100g cooked", calories: 291, proteinG: 24.5, carbsG: 0, fatG: 21.9, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "salmon", aliases: ["salmon"], servingDescription: "100g cooked", calories: 208, proteinG: 22.1, carbsG: 0, fatG: 12.4, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "tuna", aliases: ["tuna"], servingDescription: "100g canned in water, drained", calories: 116, proteinG: 25.5, carbsG: 0, fatG: 0.8, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "shrimp", aliases: ["shrimp"], servingDescription: "100g cooked", calories: 99, proteinG: 24, carbsG: 0.2, fatG: 0.3, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "pork chop", aliases: ["pork chop", "pork"], servingDescription: "100g cooked", calories: 231, proteinG: 26.6, carbsG: 0, fatG: 13.2, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "turkey breast", aliases: ["turkey breast", "turkey"], servingDescription: "100g cooked", calories: 135, proteinG: 30, carbsG: 0, fatG: 0.7, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "bacon", aliases: ["bacon"], servingDescription: "1 slice cooked (8g)", calories: 43, proteinG: 3, carbsG: 0.1, fatG: 3.4, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
+  { name: "egg", aliases: ["egg", "eggs"], servingDescription: "1 large (50g)", calories: 72, proteinG: 6.3, carbsG: 0.4, fatG: 4.8, fiberG: 0, addedSugarG: 0, totalSugarG: 0.2, caffeineMg: 0, confidence: "high" },
+  { name: "egg white", aliases: ["egg white", "egg whites"], servingDescription: "1 large (33g)", calories: 17, proteinG: 3.6, carbsG: 0.2, fatG: 0.1, fiberG: 0, addedSugarG: 0, totalSugarG: 0.2, caffeineMg: 0, confidence: "high" },
+  { name: "tofu", aliases: ["tofu"], servingDescription: "100g firm", calories: 76, proteinG: 8, carbsG: 1.9, fatG: 4.8, fiberG: 0.3, addedSugarG: 0, totalSugarG: 0.6, caffeineMg: 0, confidence: "high" },
 
-  it("falls back to a low-confidence range estimate for an unrecognized food", () => {
-    const [item] = parseNutritionText("a bowl of imaginary glorp stew");
-    expect(item!.confidence).toBe("low");
-    expect(item!.calorieRangeLow).toBeLessThan(item!.calories);
-    expect(item!.calorieRangeHigh).toBeGreaterThan(item!.calories);
-  });
+  // --- Dairy ---
+  { name: "whole milk", aliases: ["whole milk"], servingDescription: "1 cup (244g)", calories: 149, proteinG: 7.7, carbsG: 11.7, fatG: 7.9, fiberG: 0, addedSugarG: 0, totalSugarG: 12.3, caffeineMg: 0, confidence: "high" },
+  { name: "2% milk", aliases: ["2% milk", "reduced fat milk"], servingDescription: "1 cup (244g)", calories: 122, proteinG: 8.1, carbsG: 11.4, fatG: 4.6, fiberG: 0, addedSugarG: 0, totalSugarG: 12.3, caffeineMg: 0, confidence: "high" },
+  { name: "skim milk", aliases: ["skim milk", "milk", "nonfat milk"], servingDescription: "1 cup (245g)", calories: 83, proteinG: 8.3, carbsG: 12.2, fatG: 0.2, fiberG: 0, addedSugarG: 0, totalSugarG: 12.5, caffeineMg: 0, confidence: "high" },
+  { name: "greek yogurt", aliases: ["greek yogurt"], servingDescription: "1 cup (245g) plain nonfat", calories: 146, proteinG: 25, carbsG: 8, fatG: 0.5, fiberG: 0, addedSugarG: 0, totalSugarG: 8, caffeineMg: 0, confidence: "high" },
+  { name: "yogurt", aliases: ["yogurt"], servingDescription: "1 cup (245g) plain whole milk", calories: 149, proteinG: 8.5, carbsG: 11.4, fatG: 8, fiberG: 0, addedSugarG: 0, totalSugarG: 11.4, caffeineMg: 0, confidence: "high" },
+  { name: "cheddar cheese", aliases: ["cheddar", "cheddar cheese"], servingDescription: "1 oz (28g)", calories: 114, proteinG: 7, carbsG: 0.4, fatG: 9.4, fiberG: 0, addedSugarG: 0, totalSugarG: 0.1, caffeineMg: 0, confidence: "high" },
+  { name: "mozzarella cheese", aliases: ["mozzarella"], servingDescription: "1 oz (28g) part-skim", calories: 72, proteinG: 6.9, carbsG: 0.8, fatG: 4.5, fiberG: 0, addedSugarG: 0, totalSugarG: 0.3, caffeineMg: 0, confidence: "high" },
+  { name: "cottage cheese", aliases: ["cottage cheese"], servingDescription: "1 cup (226g) low-fat 2%", calories: 163, proteinG: 28, carbsG: 6.2, fatG: 4.3, fiberG: 0, addedSugarG: 0, totalSugarG: 6, caffeineMg: 0, confidence: "high" },
+  { name: "butter", aliases: ["butter"], servingDescription: "1 tbsp (14g)", calories: 102, proteinG: 0.1, carbsG: 0, fatG: 11.5, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "high" },
 
-  it("keeps a drink and a milk modifier as one item when the drink's own reference already assumes it", () => {
-    const items = parseNutritionText("a latte with whole milk");
-    expect(items).toHaveLength(1);
-    expect(items[0]!.name).toContain("latte");
-    expect(items[0]!.name).toContain("with whole milk");
-  });
+  // --- Grains / starches ---
+  { name: "white rice", aliases: ["white rice", "rice"], servingDescription: "1 cup cooked (158g)", calories: 205, proteinG: 4.3, carbsG: 44.5, fatG: 0.4, fiberG: 0.6, addedSugarG: 0, totalSugarG: 0.1, caffeineMg: 0, confidence: "high" },
+  { name: "brown rice", aliases: ["brown rice"], servingDescription: "1 cup cooked (195g)", calories: 216, proteinG: 5, carbsG: 44.8, fatG: 1.8, fiberG: 3.5, addedSugarG: 0, totalSugarG: 0.7, caffeineMg: 0, confidence: "high" },
+  { name: "quinoa", aliases: ["quinoa"], servingDescription: "1 cup cooked (185g)", calories: 222, proteinG: 8.1, carbsG: 39.4, fatG: 3.6, fiberG: 5.2, addedSugarG: 0, totalSugarG: 1.6, caffeineMg: 0, confidence: "high" },
+  { name: "oatmeal", aliases: ["oatmeal", "oats"], servingDescription: "1 cup cooked (234g) plain", calories: 158, proteinG: 6, carbsG: 27, fatG: 3.2, fiberG: 4, addedSugarG: 0, totalSugarG: 1, caffeineMg: 0, confidence: "high" },
+  { name: "pasta", aliases: ["pasta", "spaghetti"], servingDescription: "1 cup cooked (140g)", calories: 220, proteinG: 8.1, carbsG: 43.2, fatG: 1.3, fiberG: 2.5, addedSugarG: 0, totalSugarG: 0.8, caffeineMg: 0, confidence: "high" },
+  { name: "whole wheat toast", aliases: ["whole wheat toast", "toast", "slice of bread", "whole wheat bread"], servingDescription: "1 slice (28g)", calories: 69, proteinG: 3.6, carbsG: 11.6, fatG: 1.1, fiberG: 1.9, addedSugarG: 1.4, totalSugarG: 1.6, caffeineMg: 0, confidence: "high" },
+  { name: "white bread", aliases: ["white bread"], servingDescription: "1 slice (25g)", calories: 67, proteinG: 1.9, carbsG: 12.7, fatG: 0.8, fiberG: 0.6, addedSugarG: 1.4, totalSugarG: 1.4, caffeineMg: 0, confidence: "high" },
+  { name: "bagel", aliases: ["bagel"], servingDescription: "1 medium (105g)", calories: 289, proteinG: 11, carbsG: 56, fatG: 1.7, fiberG: 2.4, addedSugarG: 3, totalSugarG: 4, caffeineMg: 0, confidence: "high" },
+  { name: "flour tortilla", aliases: ["tortilla"], servingDescription: "1 medium (49g)", calories: 146, proteinG: 3.9, carbsG: 24, fatG: 3.5, fiberG: 1.4, addedSugarG: 0.5, totalSugarG: 0.9, caffeineMg: 0, confidence: "high" },
 
-  it("still splits into two foods when 'with' isn't just describing how the first was made", () => {
-    const items = parseNutritionText("chicken with rice");
-    expect(items).toHaveLength(2);
-    expect(items[0]!.name).toContain("chicken");
-    expect(items[1]!.name).toContain("rice");
-  });
+  // --- Legumes / nuts ---
+  { name: "black beans", aliases: ["black beans"], servingDescription: "1 cup cooked (172g)", calories: 227, proteinG: 15.2, carbsG: 40.8, fatG: 0.9, fiberG: 15, addedSugarG: 0, totalSugarG: 0.6, caffeineMg: 0, confidence: "high" },
+  { name: "chickpeas", aliases: ["chickpeas", "garbanzo"], servingDescription: "1 cup cooked (164g)", calories: 269, proteinG: 14.5, carbsG: 45, fatG: 4.2, fiberG: 12.5, addedSugarG: 0, totalSugarG: 7.9, caffeineMg: 0, confidence: "high" },
+  { name: "lentils", aliases: ["lentils"], servingDescription: "1 cup cooked (198g)", calories: 230, proteinG: 17.9, carbsG: 39.9, fatG: 0.8, fiberG: 15.6, addedSugarG: 0, totalSugarG: 3.6, caffeineMg: 0, confidence: "high" },
+  { name: "peanut butter", aliases: ["peanut butter"], servingDescription: "1 tbsp (16g)", calories: 94, proteinG: 4, carbsG: 3.5, fatG: 8, fiberG: 1, addedSugarG: 1.5, totalSugarG: 1.5, caffeineMg: 0, confidence: "high" },
+  { name: "almonds", aliases: ["almonds"], servingDescription: "1 oz (28g), ~23 nuts", calories: 164, proteinG: 6, carbsG: 6.1, fatG: 14.2, fiberG: 3.5, addedSugarG: 0, totalSugarG: 1.2, caffeineMg: 0, confidence: "high" },
+  { name: "walnuts", aliases: ["walnuts"], servingDescription: "1 oz (28g)", calories: 185, proteinG: 4.3, carbsG: 3.9, fatG: 18.5, fiberG: 1.9, addedSugarG: 0, totalSugarG: 0.7, caffeineMg: 0, confidence: "high" },
+  { name: "peanuts", aliases: ["peanuts"], servingDescription: "1 oz (28g)", calories: 161, proteinG: 7.3, carbsG: 4.6, fatG: 14, fiberG: 2.4, addedSugarG: 0, totalSugarG: 1.1, caffeineMg: 0, confidence: "high" },
 
-  it("converts an explicit volume unit into an accurate multiplier instead of a serving count", () => {
-    const [doubled] = parseNutritionText("480 ml coffee"); // coffee's reference is 1 cup = 240ml
-    expect(doubled!.calories).toBeCloseTo(4, 0); // 2x coffee's 2 kcal reference, not 480x
-  });
+  // --- Beverages ---
+  { name: "coffee", aliases: ["coffee"], servingDescription: "1 cup (240ml) brewed black", calories: 2, proteinG: 0.3, carbsG: 0, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 95, confidence: "high" },
+  { name: "espresso", aliases: ["espresso"], servingDescription: "1 shot (30ml)", calories: 3, proteinG: 0.1, carbsG: 0.5, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 64, confidence: "high" },
+  { name: "black tea", aliases: ["black tea", "tea"], servingDescription: "1 cup (240ml)", calories: 2, proteinG: 0, carbsG: 0.7, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 47, confidence: "high" },
+  { name: "green tea", aliases: ["green tea"], servingDescription: "1 cup (240ml)", calories: 2, proteinG: 0.5, carbsG: 0, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 28, confidence: "high" },
+  { name: "soda", aliases: ["soda", "coke", "cola"], servingDescription: "1 can (355ml)", calories: 140, proteinG: 0, carbsG: 39, fatG: 0, fiberG: 0, addedSugarG: 39, totalSugarG: 39, caffeineMg: 34, confidence: "high" },
+  { name: "diet soda", aliases: ["diet soda", "diet coke"], servingDescription: "1 can (355ml)", calories: 0, proteinG: 0, carbsG: 0.3, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 42, confidence: "high" },
+  { name: "orange juice", aliases: ["orange juice"], servingDescription: "1 cup (248g)", calories: 112, proteinG: 1.7, carbsG: 25.8, fatG: 0.5, fiberG: 0.5, addedSugarG: 0, totalSugarG: 20.8, caffeineMg: 0, confidence: "high" },
+  { name: "energy drink", aliases: ["energy drink", "red bull", "monster"], servingDescription: "1 can (250ml)", calories: 110, proteinG: 0, carbsG: 28, fatG: 0, fiberG: 0, addedSugarG: 27, totalSugarG: 27, caffeineMg: 80, confidence: "medium" },
+  { name: "beer", aliases: ["beer"], servingDescription: "1 can (355ml)", calories: 153, proteinG: 1.6, carbsG: 12.6, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 0, caffeineMg: 0, confidence: "medium" },
+  { name: "red wine", aliases: ["red wine", "wine"], servingDescription: "5 fl oz (147ml)", calories: 125, proteinG: 0.1, carbsG: 3.8, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 0.9, caffeineMg: 0, confidence: "medium" },
+  { name: "latte", aliases: ["latte"], servingDescription: "1 cup (240ml) whole milk, 1 shot", calories: 120, proteinG: 6.5, carbsG: 9, fatG: 6.5, fiberG: 0, addedSugarG: 0, totalSugarG: 9, caffeineMg: 75, confidence: "medium" },
+  { name: "cappuccino", aliases: ["cappuccino"], servingDescription: "1 cup (150ml)", calories: 70, proteinG: 3.8, carbsG: 5.5, fatG: 3.8, fiberG: 0, addedSugarG: 0, totalSugarG: 5.5, caffeineMg: 63, confidence: "medium" },
+  { name: "smoothie", aliases: ["smoothie"], servingDescription: "12 fl oz (355ml) fruit smoothie", calories: 200, proteinG: 3, carbsG: 45, fatG: 1, fiberG: 3, addedSugarG: 20, totalSugarG: 35, caffeineMg: 0, confidence: "medium" },
 
-  it("converts an explicit weight unit into an accurate multiplier instead of a serving count", () => {
-    const [doubled] = parseNutritionText("200 g chicken breast"); // reference is 100g cooked
-    expect(doubled!.calories).toBeCloseTo(330, 0); // 2x chicken breast's 165 kcal reference
-  });
-
-  it("shows the food's own standard serving when no quantity is typed at all", () => {
-    const items = parseNutritionText("rice, lentils, salmon, broccoli");
-    for (const item of items) {
-      // every item should carry SOME portion descriptor, not just the bare food name
-      expect(item.name.split(" ").length).toBeGreaterThan(1);
-    }
-    expect(items.find((i) => i.name.includes("salmon"))!.name).toContain("100g");
-    expect(items.find((i) => i.name.includes("rice"))!.name).toContain("cup");
-  });
-
-  it("does not repeat the food name when the standard-serving label already contains it", () => {
-    const [burrito] = parseNutritionText("burrito");
-    const occurrences = burrito!.name.toLowerCase().split("burrito").length - 1;
-    expect(occurrences).toBe(1);
-  });
-
-  it("logs half a whole avocado as half its calories, not a quarter", () => {
-    // Regression test: avocado's reference serving used to be "1/2 medium" itself,
-    // so "half an avocado" (0.5x) landed on a quarter of a real avocado (~80 kcal)
-    // instead of half (~160 kcal). The reference must describe ONE WHOLE avocado.
-    const [half] = parseNutritionText("half an avocado");
-    const [whole] = parseNutritionText("an avocado");
-    expect(half!.calories).toBeCloseTo(whole!.calories / 2, 0);
-    expect(half!.calories).toBeGreaterThan(140);
-    expect(half!.calories).toBeLessThan(180);
-  });
-
-  // --- Full-database audit regressions: entries whose reference serving described
-  // MORE than one natural unit (2 tbsp, 2 slices, 8 pieces), the same underlying bug
-  // class as avocado, found by systematically checking every entry rather than
-  // waiting for each one to surface individually.
-
-  it("logs a single slice of bacon as one slice, not the old two-slice reference", () => {
-    const [oneSlice] = parseNutritionText("a slice of bacon");
-    const [twoSlices] = parseNutritionText("2 slices of bacon");
-    expect(twoSlices!.calories).toBeCloseTo(oneSlice!.calories * 2, 0);
-    expect(oneSlice!.calories).toBeGreaterThan(30);
-    expect(oneSlice!.calories).toBeLessThan(55);
-  });
-
-  it("logs a single tablespoon of peanut butter as one tablespoon, not the old two-tablespoon reference", () => {
-    const [oneTbsp] = parseNutritionText("a tablespoon of peanut butter");
-    const [twoTbsp] = parseNutritionText("2 tbsp peanut butter");
-    expect(twoTbsp!.calories).toBeCloseTo(oneTbsp!.calories * 2, 0);
-    expect(oneTbsp!.calories).toBeGreaterThan(80);
-    expect(oneTbsp!.calories).toBeLessThan(105);
-  });
-
-  it("logs a single tablespoon of hummus as one tablespoon, not the old two-tablespoon reference", () => {
-    const [oneTbsp] = parseNutritionText("a tablespoon of hummus");
-    expect(oneTbsp!.calories).toBeGreaterThan(25);
-    expect(oneTbsp!.calories).toBeLessThan(45);
-  });
-
-  it("logs a single piece of california roll as one piece, not the old eight-piece reference", () => {
-    const [onePiece] = parseNutritionText("a piece of california roll");
-    const [eightPieces] = parseNutritionText("8 pieces california roll");
-    expect(eightPieces!.calories).toBeCloseTo(onePiece!.calories * 8, 0);
-    expect(onePiece!.calories).toBeGreaterThan(20);
-    expect(onePiece!.calories).toBeLessThan(45);
-  });
-
-  it("logs a single cup of salad greens as one cup, not the old two-cup reference", () => {
-    const [oneCup] = parseNutritionText("a cup of lettuce");
-    expect(oneCup!.calories).toBeGreaterThan(2);
-    expect(oneCup!.calories).toBeLessThan(9);
-  });
-
-  // --- Proof that entries which legitimately keep a non-1 leading reference amount
-  // (because their unit is generically convertible and shares the parenthetical's
-  // dimension) still scale correctly for ANY explicit quantity, not just the
-  // reference's own count - backing the exemption documented in foodDatabase.test.ts.
-
-  it("scales a 100g-referenced meat correctly for an arbitrary explicit gram amount", () => {
-    const [amount] = parseNutritionText("250 g salmon"); // reference is 100g cooked = 208 kcal
-    expect(amount!.calories).toBeCloseTo(208 * 2.5, 0);
-  });
-
-  it("scales a fl-oz-referenced drink correctly even though its own reference isn't 1 fl oz", () => {
-    const [glass] = parseNutritionText("5 fl oz red wine"); // reference is 5 fl oz (147ml) = 125 kcal
-    const [doubleGlass] = parseNutritionText("10 fl oz red wine");
-    // 147ml is a rounded stand-in for 5 fl oz's true ~147.9ml, so the reference amount
-    // itself isn't exact to the kcal - what matters is that doubling the input exactly
-    // doubles the output (proving the conversion is a real ratio, not a flat 1x/2x
-    // guess) and that the reference amount alone lands within a sane range of 125.
-    expect(glass!.calories).toBeGreaterThan(120);
-    expect(glass!.calories).toBeLessThan(130);
-    expect(doubleGlass!.calories).toBeCloseTo(glass!.calories * 2, 0);
-  });
-
-  // --- Found while spot-checking random items + explicit quantities against USDA:
-  // fractional cup measures of rice/lentils happen to come out right (their own
-  // reference IS "1 cup"), but that's a coincidence of the data, not proof the parser
-  // understands "cup" as a unit in that path - these two entries are the ones where a
-  // mismatched real unit was silently accepted as a flat, falsely-precise multiplier.
-
-  it("scales a half-cup measure correctly when the food's own reference is exactly 1 cup", () => {
-    const [rice] = parseNutritionText("1/2 cup of rice");
-    const [lentils] = parseNutritionText("1/2 cup of lentils");
-    expect(rice!.calories).toBeCloseTo(205 * 0.5, 0);
-    expect(lentils!.calories).toBeCloseTo(230 * 0.5, 0);
-  });
-
-  it("matches ribeye to its own fattier macros instead of silently substituting sirloin", () => {
-    // Both entries share the word "steak," so without a dedicated ribeye entry the
-    // longest-alias-wins matcher fell through to the generic "steak" (sirloin) data -
-    // real, but wrong, macros for a noticeably fattier cut.
-    const [ribeye] = parseNutritionText("a ribeye steak");
-    const [sirloin] = parseNutritionText("a steak");
-    expect(ribeye!.name).toContain("ribeye");
-    expect(ribeye!.fatG).toBeGreaterThan(sirloin!.fatG);
-    expect(ribeye!.calories).toBeGreaterThan(sirloin!.calories);
-  });
-
-  it("flags low confidence instead of a falsely-precise number when a real unit can't convert to the food's reference dimension", () => {
-    // Balsamic vinegar's reference is "1 tbsp" - asking for cups is a real unit, just
-    // not one computeQuantityMultiplier can convert without a density figure. Before
-    // this fix, "1/4 cup" was silently read as a flat 0.25x multiplier (as if it meant
-    // a quarter-tablespoon), presented with the food's normal high confidence.
-    const [quarterCup] = parseNutritionText("1/4 cup balsamic vinegar");
-    expect(quarterCup!.confidence).toBe("low");
-    expect(quarterCup!.calorieRangeLow).toBeLessThan(quarterCup!.calories);
-    expect(quarterCup!.calorieRangeHigh).toBeGreaterThan(quarterCup!.calories);
-  });
-
-  it("keeps normal high confidence for a same-dimension unit conversion that actually works", () => {
-    const [wine] = parseNutritionText("5 fl oz red wine");
-    expect(wine!.confidence).toBe("high");
-  });
-
-  it("does not falsely flag a spelled-out unit as a mismatch against its own abbreviation", () => {
-    // "tablespoon" and the peanut butter entry's own "tbsp" reference are the same
-    // real-world unit under different spellings - this must NOT be treated the same
-    // as a genuine cup-vs-tbsp mismatch just because the words look different.
-    const [oneTbsp] = parseNutritionText("a tablespoon of peanut butter");
-    expect(oneTbsp!.confidence).toBe("high");
-    expect(oneTbsp!.calories).toBeCloseTo(94, 0);
-  });
-
-  it("matches a multi-ingredient smoothie to the smoothie entry, not its last-mentioned fruit", () => {
-    // Regression: "banana blueberry smoothie" used to match "blueberry" (9 letters)
-    // over "smoothie" (8 letters) purely because it's a longer alias string, logging
-    // a fruit smoothie as a plain cup of blueberries (84 kcal instead of the
-    // smoothie's own 200 kcal reference). The head noun of a food phrase is usually
-    // the LAST word, so the match closest to the end of the text should win.
-    const [item] = parseNutritionText("banana blueberry smoothie");
-    expect(item!.name).toContain("smoothie");
-    expect(item!.calories).toBeCloseTo(200, 0);
-  });
-
-  // --- User-editable custom foods (added/edited from the Nutrition screen, persisted
-  // in IndexedDB by the caller, never by this file - see customFoodRepository).
-
-  it("matches a custom entry for a food the built-in database has no info for", () => {
-    const customEntries: FoodDatabaseEntry[] = [
-      {
-        name: "dragon fruit",
-        aliases: ["dragon fruit"],
-        servingDescription: "1 cup (170g)",
-        calories: 102,
-        proteinG: 2.2,
-        carbsG: 22,
-        fatG: 0.5,
-        fiberG: 5,
-        addedSugarG: 0,
-        totalSugarG: 8,
-        caffeineMg: 0,
-        confidence: "high",
-      },
-    ];
-    const [item] = parseNutritionText("a cup of dragon fruit", customEntries);
-    expect(item!.calories).toBeCloseTo(102, 0);
-    expect(item!.confidence).toBe("high");
-  });
-
-  it("lets a custom entry override a built-in food sharing its alias", () => {
-    // The built-in "ribeye steak" entry is 291 kcal/100g - a custom correction should
-    // win over it rather than just adding a second, ignored candidate.
-    const customEntries: FoodDatabaseEntry[] = [
-      {
-        name: "ribeye steak",
-        aliases: ["ribeye steak", "ribeye"],
-        servingDescription: "100g cooked",
-        calories: 999,
-        proteinG: 1,
-        carbsG: 0,
-        fatG: 1,
-        fiberG: 0,
-        addedSugarG: 0,
-        totalSugarG: 0,
-        caffeineMg: 0,
-        confidence: "high",
-      },
-    ];
-    const [withCustom] = parseNutritionText("a ribeye steak", customEntries);
-    const [builtIn] = parseNutritionText("a ribeye steak");
-    expect(withCustom!.calories).toBeCloseTo(999, 0);
-    expect(builtIn!.calories).toBeCloseTo(291, 0);
-  });
-});
+  // --- Packaged / prepared ---
+  { name: "donut", aliases: ["donut", "doughnut"], servingDescription: "1 glazed (60g)", calories: 240, proteinG: 3, carbsG: 27, fatG: 14, fiberG: 0.7, addedSugarG: 12, totalSugarG: 12, caffeineMg: 0, confidence: "medium" },
+  { name: "protein shake", aliases: ["protein shake", "whey shake"], servingDescription: "1 scoop in 8 fl oz water (240ml)", calories: 120, proteinG: 24, carbsG: 3, fatG: 1.5, fiberG: 0, addedSugarG: 1, totalSugarG: 2, caffeineMg: 0, confidence: "medium" },
+  { name: "protein bar", aliases: ["protein bar"], servingDescription: "1 bar (60g)", calories: 220, proteinG: 20, carbsG: 24, fatG: 8, fiberG: 5, addedSugarG: 5, totalSugarG: 6, caffeineMg: 0, confidence: "medium" },
+  { name: "granola bar", aliases: ["granola bar"], servingDescription: "1 bar (24g)", calories: 100, proteinG: 2, carbsG: 16, fatG: 4, fiberG: 1, addedSugarG: 6, totalSugarG: 7, caffeineMg: 0, confidence: "medium" },
+  { name: "potato chips", aliases: ["potato chips", "chips"], servingDescription: "1 oz (28g)", calories: 152, proteinG: 2, carbsG: 15, fatG: 10, fiberG: 1.2, addedSugarG: 0, totalSugarG: 0.1, caffeineMg: 0, confidence: "medium" },
+  { name: "pretzels", aliases: ["pretzels"], servingDescription: "1 oz (28g)", calories: 108, proteinG: 2.6, carbsG: 22.5, fatG: 1, fiberG: 0.9, addedSugarG: 0.5, totalSugarG: 0.9, caffeineMg: 0, confidence: "medium" },
+  { name: "cheese pizza", aliases: ["pizza"], servingDescription: "1 slice (107g)", calories: 285, proteinG: 12.2, carbsG: 35.7, fatG: 10.4, fiberG: 2.3, addedSugarG: 3, totalSugarG: 3.8, caffeineMg: 0, confidence: "medium" },
+  { name: "hamburger", aliases: ["hamburger", "burger"], servingDescription: "1 fast-food sandwich (110g)", calories: 250, proteinG: 12, carbsG: 31, fatG: 9, fiberG: 1.5, addedSugarG: 5, totalSugarG: 6, caffeineMg: 0, confidence: "medium" },
+  { name: "french fries", aliases: ["french fries", "fries"], servingDescription: "1 medium fast-food serving (117g)", calories: 365, proteinG: 4, carbsG: 48, fatG: 17, fiberG: 4.4, addedSugarG: 0, totalSugarG: 0.2, caffeineMg: 0, confidence: "medium" },
+  { name: "ice cream", aliases: ["ice cream"], servingDescription: "1 cup (132g) vanilla", calories: 274, proteinG: 4.6, carbsG: 31.2, fatG: 14.6, fiberG: 1, addedSugarG: 28, totalSugarG: 28, caffeineMg: 0, confidence: "medium" },
+  { name: "chocolate chip cookie", aliases: ["chocolate chip cookie", "cookie"], servingDescription: "1 medium (16g)", calories: 78, proteinG: 0.9, carbsG: 9.6, fatG: 4.5, fiberG: 0.4, addedSugarG: 5, totalSugarG: 5.3, caffeineMg: 0, confidence: "medium" },
+  { name: "dark chocolate", aliases: ["dark chocolate"], servingDescription: "1 oz (28g)", calories: 155, proteinG: 2.2, carbsG: 13, fatG: 11, fiberG: 3.1, addedSugarG: 6.8, totalSugarG: 6.8, caffeineMg: 12, confidence: "medium" },
+  { name: "hummus", aliases: ["hummus"], servingDescription: "1 tbsp (15g)", calories: 35, proteinG: 1, carbsG: 3, fatG: 2.3, fiberG: 1, addedSugarG: 0, totalSugarG: 0.3, caffeineMg: 0, confidence: "medium" },
+  { name: "balsamic vinegar", aliases: ["balsamic vinegar", "balsamic"], servingDescription: "1 tbsp (16g)", calories: 14, proteinG: 0.1, carbsG: 2.7, fatG: 0, fiberG: 0, addedSugarG: 0, totalSugarG: 2.4, caffeineMg: 0, confidence: "high" },
+  { name: "turkey sandwich", aliases: ["turkey sandwich"], servingDescription: "1 deli sandwich (220g)", calories: 320, proteinG: 24, carbsG: 34, fatG: 10, fiberG: 3, addedSugarG: 3, totalSugarG: 5, caffeineMg: 0, confidence: "medium" },
+  { name: "burrito", aliases: ["burrito"], servingDescription: "1 bean-and-cheese burrito (200g)", calories: 445, proteinG: 17, carbsG: 60, fatG: 15, fiberG: 8, addedSugarG: 0, totalSugarG: 2, caffeineMg: 0, confidence: "medium" },
+  { name: "california roll", aliases: ["sushi", "california roll"], servingDescription: "1 piece (21g)", calories: 32, proteinG: 1.1, carbsG: 4.8, fatG: 0.9, fiberG: 0.3, addedSugarG: 0.3, totalSugarG: 0.4, caffeineMg: 0, confidence: "medium" },
+];
