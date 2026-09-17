@@ -9,6 +9,7 @@ import type { SkinEntry, SkincareChange } from "./schemas/skin";
 import type { Cycle, MenstrualCycleEntry } from "./schemas/cycle";
 import type { InsightRecord, WeeklyReport } from "./schemas/derived";
 import type { PhotoBlob } from "./schemas/photoBlob";
+import type { CustomFood } from "./schemas/customFood";
 
 /**
  * One Dexie database for the whole app (ARCHITECTURE.md §8.1: Dexie/IndexedDB, not
@@ -39,6 +40,7 @@ export class HealthInsightsDb extends Dexie {
   insights!: Table<InsightRecord, string>;
   weeklyReports!: Table<WeeklyReport, string>;
   photoBlobs!: Table<PhotoBlob, string>;
+  customFoods!: Table<CustomFood, string>;
 
   constructor() {
     super("health-insights");
@@ -60,6 +62,28 @@ export class HealthInsightsDb extends Dexie {
       insights: "id, domain, generatedAt",
       weeklyReports: "id, weekStartDate",
       photoBlobs: "id",
+    });
+    // Additive-only migration (DATA_MODEL.md convention): a fresh store for
+    // user-added/edited food entries, never touching any table above.
+    this.version(2).stores({
+      userProfile: "id",
+      dailyMetrics: "id, date",
+      workouts: "id, workoutType, startTime, source, sourceWorkoutId",
+      strengthWorkouts: "workoutId",
+      volleyballSessions: "workoutId",
+      nutritionDays: "id, date",
+      foodEntries: "id, date, timestamp",
+      bodyMeasurements: "id, date, measurementType",
+      symptomEntries: "id, dateTime",
+      runSessions: "id, workoutId",
+      skinEntries: "id, date",
+      skincareChanges: "id, date",
+      menstrualCycleEntries: "id, date",
+      cycles: "id, startDate",
+      insights: "id, domain, generatedAt",
+      weeklyReports: "id, weekStartDate",
+      photoBlobs: "id",
+      customFoods: "id, name",
     });
   }
 }
