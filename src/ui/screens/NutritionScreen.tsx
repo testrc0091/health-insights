@@ -18,8 +18,6 @@ import {
 import type { FoodEntry, ParsedFoodItem } from "../../storage/schemas/nutrition";
 import type { CustomFood } from "../../storage/schemas/customFood";
 import { parseNutritionText } from "../../integrations/nutrition/nutritionParser";
-import { BARCODE_DATABASE } from "../../integrations/nutrition/barcodeDatabase";
-import type { BarcodeFoodEntry } from "../../integrations/nutrition/barcodeDatabase";
 import {
   getDailyNutritionTotals,
   getOrResolveNutritionTarget,
@@ -145,10 +143,6 @@ export function NutritionScreen() {
   const [quickAddText, setQuickAddText] = useState("");
   const [reviewItems, setReviewItems] = useState<ReviewItem[] | null>(null);
   const [parsedRawText, setParsedRawText] = useState<string | null>(null);
-
-  const [barcodeInput, setBarcodeInput] = useState("");
-  const [barcodeSearchedText, setBarcodeSearchedText] = useState<string | null>(null);
-  const [barcodeMatch, setBarcodeMatch] = useState<BarcodeFoodEntry | null>(null);
 
   const [foodFormOpen, setFoodFormOpen] = useState(false);
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
@@ -329,43 +323,6 @@ export function NutritionScreen() {
     setQuickAddText(text);
     setReviewItems(null);
     setParsedRawText(null);
-  }
-
-  function handleBarcodeLookup() {
-    const code = barcodeInput.trim();
-    setBarcodeSearchedText(code);
-    setBarcodeMatch(BARCODE_DATABASE.find((b) => b.barcode === code) ?? null);
-  }
-
-  async function handleLogBarcode() {
-    if (!barcodeMatch) return;
-    const now = new Date();
-    const item: ParsedFoodItem = {
-      name: barcodeMatch.name,
-      calories: barcodeMatch.calories,
-      calorieRangeLow: barcodeMatch.calories,
-      calorieRangeHigh: barcodeMatch.calories,
-      proteinG: barcodeMatch.proteinG,
-      carbsG: barcodeMatch.carbsG,
-      fatG: barcodeMatch.fatG,
-      fiberG: barcodeMatch.fiberG,
-      addedSugarG: barcodeMatch.addedSugarG,
-      totalSugarG: barcodeMatch.totalSugarG,
-      caffeineMg: barcodeMatch.caffeineMg,
-      confidence: "high",
-    };
-    await foodEntryRepository.put({
-      id: uuid(),
-      timestamp: now.toISOString(),
-      date: toIsoDate(now),
-      rawText: `${barcodeMatch.name} (${barcodeMatch.servingDescription})`,
-      parsedFoods: [item],
-      source: "packaged_nutrition",
-      notes: null,
-    });
-    setBarcodeInput("");
-    setBarcodeMatch(null);
-    setBarcodeSearchedText(null);
   }
 
   async function handleDeleteEntry(id: string) {
@@ -704,49 +661,6 @@ export function NutritionScreen() {
           </div>
         ) : (
           !foodFormOpen && <p className="text-sm text-slate-500 dark:text-slate-400">No custom foods yet.</p>
-        )}
-      </Card>
-
-      <Card>
-        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Barcode lookup</h2>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            inputMode="numeric"
-            placeholder="Enter barcode digits"
-            className="flex-1 rounded-lg border border-slate-200 bg-transparent px-2 py-1.5 text-sm focus:border-accent focus:outline-none dark:border-slate-700"
-            value={barcodeInput}
-            onChange={(e) => setBarcodeInput(e.target.value)}
-          />
-          <button
-            className="rounded-full bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
-            onClick={handleBarcodeLookup}
-            disabled={barcodeInput.trim().length === 0}
-          >
-            Look up
-          </button>
-        </div>
-        {barcodeSearchedText !== null && (
-          <div className="mt-2">
-            {barcodeMatch ? (
-              <div className="flex items-center justify-between rounded-lg border border-slate-200 p-2 text-sm dark:border-slate-700">
-                <div>
-                  <p className="font-medium text-slate-800 dark:text-slate-100">{barcodeMatch.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {barcodeMatch.servingDescription} &middot; {barcodeMatch.calories} kcal &middot; {barcodeMatch.proteinG}g protein
-                  </p>
-                </div>
-                <button
-                  className="rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-white"
-                  onClick={handleLogBarcode}
-                >
-                  Log this
-                </button>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500 dark:text-slate-400">No match — try logging it by name instead.</p>
-            )}
-          </div>
         )}
       </Card>
 
