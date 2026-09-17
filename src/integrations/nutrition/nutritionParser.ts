@@ -39,11 +39,14 @@ function formatQuantity(q: number): string {
   return Number.isInteger(q) ? String(q) : q.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function findFoodMatch(text: string): FoodDatabaseEntry | null {
+function findFoodMatch(text: string, database: FoodDatabaseEntry[]): FoodDatabaseEntry | null {
   const normalized = text.toLowerCase().trim();
-  const candidates = FOOD_DATABASE.flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias })));
+  const candidates = database.flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias })));
   // Longest alias first, so a more specific multi-word alias (e.g. "greek yogurt")
-  // wins over a shorter one ("yogurt") that would otherwise match the same text.
+  // wins over a shorter one ("yogurt") that would otherwise match the same text. Ties
+  // (equal alias length) keep whatever order `database` put them in — callers rely on
+  // this to make custom/user-edited entries win over built-in ones with the same
+  // alias, by listing custom entries first (Array.prototype.sort is stable).
   candidates.sort((a, b) => b.alias.length - a.alias.length);
   for (const { entry, alias } of candidates) {
     // Whole-word match, not a bare substring check — otherwise short aliases false-
@@ -67,8 +70,8 @@ function findFoodMatch(text: string): FoodDatabaseEntry | null {
  * into X's number. If it doesn't (plain "coffee"'s description says nothing about
  * milk), treat "with" the same as "and": two foods.
  */
-function findModifierBakedInMatch(base: string, modifier: string): FoodDatabaseEntry | null {
-  const baseMatch = findFoodMatch(base);
+function findModifierBakedInMatch(base: string, modifier: string, database: FoodDatabaseEntry[]): FoodDatabaseEntry | null {
+  const baseMatch = findFoodMatch(base, database);
   if (baseMatch && baseMatch.servingDescription.toLowerCase().includes(modifier.toLowerCase())) {
     return baseMatch;
   }
@@ -78,12 +81,12 @@ function findModifierBakedInMatch(base: string, modifier: string): FoodDatabaseE
 /** Segment-level pass: decides whether a "with" clause splits into two segments or
  * stays as one (see findModifierBakedInMatch). Segments with no "with" pass through
  * untouched. */
-function splitSegmentOnWith(segment: string): string[] {
+function splitSegmentOnWith(segment: string, database: FoodDatabaseEntry[]): string[] {
   const match = segment.match(/^(.+?)\s+with\s+(.+)$/i);
   if (!match) return [segment];
   const base = match[1]!.trim();
   const modifier = match[2]!.trim();
-  if (findModifierBakedInMatch(base, modifier)) {
+  if (findModifierBakedInMatch(base, modifier, database)) {
     return [segment]; // keep whole — matched via the base, modifier kept in the name only
   }
   return [base, modifier]; // genuinely two foods, e.g. "chicken with rice"
@@ -93,12 +96,15 @@ function splitSegmentOnWith(segment: string): string[] {
  * separates the text to match against the food database (the base) from the text to
  * echo in the logged item's name (the modifier), so "latte with whole milk" matches
  * the latte entry but still reads "latte with whole milk" in your log. */
-function resolveModifierForMatching(text: string): { matchText: string; modifierSuffix: string | null } {
+function resolveModifierForMatching(
+  text: string,
+  database: FoodDatabaseEntry[],
+): { matchText: string; modifierSuffix: string | null } {
   const match = text.match(/^(.+?)\s+with\s+(.+)$/i);
   if (!match) return { matchText: text, modifierSuffix: null };
   const base = match[1]!.trim();
   const modifier = match[2]!.trim();
-  if (findModifierBakedInMatch(base, modifier)) {
+  if (findModifierBakedInMatch(base, modifier, database)) {
     return { matchText: base, modifierSuffix: modifier };
   }
   return { matchText: text, modifierSuffix: null };
@@ -196,24 +202,96 @@ function parseReferenceQuantity(servingDescription: string): { amount: number; u
   return null;
 }
 
+/** Pulls the unit WORD straight off the front of a servingDescription ("1 cup cooked
+ * (158g)" -> "cup", "1 tbsp (16g)" -> "tbsp", "100g cooked" -> "g") for comparing
+ * against a user-typed unit — see computeQuantityMultiplier's `dimensionMismatch`. */
+function referenceLeadingUnitWord(servingDescription: string): string | null {
+  const match = servingDescription.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)/);
+  return match ? match[2]!.toLowerCase() : null;
+}
+
+/** The ml-or-g conversion factor for a unit word, whichever table it belongs to —
+ * used to recognize that two spellings ("tablespoon" vs. "tbsp") are the same
+ * real-world unit, rather than comparing the words themselves. */
+function unitConversionFactor(unit: string): number | null {
+  const key = unit.toLowerCase();
+  if (key in VOLUME_ML_PER_UNIT) return VOLUME_ML_PER_UNIT[key]!;
+  if (key in WEIGHT_G_PER_UNIT) return WEIGHT_G_PER_UNIT[key]!;
+  return null;
+}
+
+/** True when a user-typed unit is close enough to the food's own reference unit word
+ * that a flat count multiplier (not a real conversion) is still trustworthy — e.g.
+ * "cup" typed against a "1 cup ..." reference, or "tablespoon" typed against a
+ * reference whose own leading word is the abbreviation "tbsp" (same unit, same
+ * conversion factor, different spelling). Falls back to comparing the words
+ * themselves (plurals normalized away) for reference words with no tabulated factor,
+ * like "slice" or "medium". */
+function unitsRoughlyMatch(typedUnit: string, referenceUnitWord: string): boolean {
+  const typedFactor = unitConversionFactor(typedUnit);
+  const referenceFactor = unitConversionFactor(referenceUnitWord);
+  if (typedFactor != null && referenceFactor != null) {
+    return Math.abs(typedFactor - referenceFactor) < 1e-6;
+  }
+  const normalize = (u: string) => u.toLowerCase().replace(/s$/, "");
+  const a = normalize(typedUnit);
+  const b = normalize(referenceUnitWord);
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
 /** Converts a user-typed amount+unit into a portion multiplier relative to the
  * matched food's own reference serving, so "12 oz coffee" scales correctly against
  * coffee's "1 cup (240ml)" reference instead of being read as "12 servings." Falls
  * back to treating the amount as a plain serving-count multiplier when the food has
  * no parenthetical reference, or the typed unit isn't in the same dimension (volume
- * vs. weight) as that reference — never a hard error, just a safe default. */
-function computeQuantityMultiplier(amount: number, unit: string, entry: FoodDatabaseEntry): number {
+ * vs. weight) as that reference — never a hard error, just a safe default.
+ *
+ * That flat fallback is only numerically right when the typed unit actually IS the
+ * reference's own unit (a "1 cup"-referenced food typed in cups just needs its count
+ * scaled, no conversion table required). `dimensionMismatch` catches the case where
+ * the fallback was taken for a REAL, recognized unit that ISN'T the reference's own —
+ * e.g. "1/4 cup balsamic vinegar" against a "1 tbsp" reference: cup and tablespoon are
+ * both real units, but the fallback can't convert between them without a per-food
+ * density, so quietly returning a normal-confidence number would misrepresent a
+ * ~4x-too-small result as an exact one. The caller uses this to downgrade confidence
+ * instead of presenting false precision (the same "never fabricate a precise number"
+ * principle UNMATCHED_ESTIMATE already applies to foods with no match at all). */
+function computeQuantityMultiplier(
+  amount: number,
+  unit: string,
+  entry: FoodDatabaseEntry,
+): { multiplier: number; dimensionMismatch: boolean } {
   const reference = parseReferenceQuantity(entry.servingDescription);
-  if (!reference) return amount;
+  if (!reference) return { multiplier: amount, dimensionMismatch: false };
 
   const table = reference.unit === "ml" ? VOLUME_ML_PER_UNIT : WEIGHT_G_PER_UNIT;
   const perUnit = table[unit.toLowerCase()];
-  if (perUnit == null) return amount;
+  if (perUnit == null) {
+    const isRealUnit = unit.toLowerCase() in VOLUME_ML_PER_UNIT || unit.toLowerCase() in WEIGHT_G_PER_UNIT;
+    const referenceUnitWord = referenceLeadingUnitWord(entry.servingDescription);
+    const matchesOwnUnit = referenceUnitWord != null && unitsRoughlyMatch(unit, referenceUnitWord);
+    return { multiplier: amount, dimensionMismatch: isRealUnit && !matchesOwnUnit };
+  }
 
-  return (amount * perUnit) / reference.amount;
+  return { multiplier: (amount * perUnit) / reference.amount, dimensionMismatch: false };
 }
 
 // --- Quantity extraction -------------------------------------------------------------
+
+/** Recognizes a unit word (e.g. "cup", "tbsp") at the very start of text and strips it
+ * (plus an optional following "of"), for quantity forms extractUnitQuantity doesn't
+ * cover — a fraction ("1/4 cup rice") or a number word ("half a cup of rice") never
+ * has a unit sitting directly after a bare digit, so it isn't caught there. Longest
+ * unit first, so "fl oz" wins over "oz" when both would match. */
+function stripLeadingUnit(text: string): { unit: string; rest: string } | null {
+  const sortedUnits = [...UNIT_WORDS].sort((a, b) => b.length - a.length);
+  for (const unit of sortedUnits) {
+    const pattern = new RegExp(`^${escapeRegExp(unit)}\\b\\s*(?:of\\s+)?(.*)$`, "i");
+    const match = text.match(pattern);
+    if (match) return { unit, rest: match[1]! };
+  }
+  return null;
+}
 
 function extractQuantity(segment: string): { quantity: number; unit: string | null; remainderText: string } {
   const trimmed = segment.trim();
@@ -225,11 +303,11 @@ function extractQuantity(segment: string): { quantity: number; unit: string | nu
 
   const fractionMatch = trimmed.match(/^(\d+)\/(\d+)\s+(.*)$/);
   if (fractionMatch) {
-    return {
-      quantity: Number(fractionMatch[1]) / Number(fractionMatch[2]),
-      unit: null,
-      remainderText: fractionMatch[3]!,
-    };
+    const quantity = Number(fractionMatch[1]) / Number(fractionMatch[2]);
+    const stripped = stripLeadingUnit(fractionMatch[3]!);
+    return stripped
+      ? { quantity, unit: stripped.unit, remainderText: stripped.rest }
+      : { quantity, unit: null, remainderText: fractionMatch[3]! };
   }
 
   const digitMatch = trimmed.match(/^(\d+(?:\.\d+)?)\s+(.*)$/);
@@ -241,7 +319,11 @@ function extractQuantity(segment: string): { quantity: number; unit: string | nu
   if (wordMatch) {
     const wordQuantity = NUMBER_WORDS[wordMatch[1]!.toLowerCase()];
     if (wordQuantity != null) {
-      return { quantity: wordQuantity, unit: null, remainderText: wordMatch[2]! };
+      const afterArticle = wordMatch[2]!.replace(/^an?\s+/i, "");
+      const stripped = stripLeadingUnit(afterArticle);
+      return stripped
+        ? { quantity: wordQuantity, unit: stripped.unit, remainderText: stripped.rest }
+        : { quantity: wordQuantity, unit: null, remainderText: wordMatch[2]! };
     }
   }
 
@@ -279,9 +361,10 @@ function combineLabelAndName(label: string, name: string): string {
   return `${label} ${name}`;
 }
 
-function parseOneSegment(segment: string): ParsedFoodItem {  const { quantity, unit, remainderText } = extractQuantity(segment);
-  const { matchText, modifierSuffix } = resolveModifierForMatching(remainderText);
-  const match = findFoodMatch(matchText);
+function parseOneSegment(segment: string, database: FoodDatabaseEntry[]): ParsedFoodItem {
+  const { quantity, unit, remainderText } = extractQuantity(segment);
+  const { matchText, modifierSuffix } = resolveModifierForMatching(remainderText, database);
+  const match = findFoodMatch(matchText, database);
 
   if (!match) {
     return {
@@ -300,11 +383,16 @@ function parseOneSegment(segment: string): ParsedFoodItem {  const { quantity, u
     };
   }
 
-  const multiplier = unit ? computeQuantityMultiplier(quantity, unit, match) : quantity;
+  const quantityResult = unit ? computeQuantityMultiplier(quantity, unit, match) : { multiplier: quantity, dimensionMismatch: false };
+  const { multiplier, dimensionMismatch } = quantityResult;
   // Single-ingredient foods (chicken breast, an apple) vary little from the USDA
   // reference value, so they get a tight range; composite/branded foods (a burrito,
-  // a protein bar) vary a lot by recipe/brand, so they get a wider one.
-  const rangeWidth = match.confidence === "high" ? 0.08 : 0.2;
+  // a protein bar) vary a lot by recipe/brand, so they get a wider one. A dimension
+  // mismatch (e.g. "cup" typed against a food only referenced in tablespoons) means
+  // the multiplier is just the raw count, not a real conversion — widen the range and
+  // drop confidence a tier rather than present that guess as precise.
+  const rangeWidth = dimensionMismatch ? 0.5 : match.confidence === "high" ? 0.08 : 0.2;
+  const confidence = dimensionMismatch ? "low" : match.confidence;
 
   // Echo the real unit the user typed ("12 oz coffee") rather than a bare portion
   // count, keep the plain-count style ("2 banana") when a count was given but no
@@ -331,7 +419,7 @@ function parseOneSegment(segment: string): ParsedFoodItem {  const { quantity, u
     addedSugarG: match.addedSugarG != null ? round(match.addedSugarG * multiplier) : null,
     totalSugarG: match.totalSugarG != null ? round(match.totalSugarG * multiplier) : null,
     caffeineMg: match.caffeineMg != null ? round(match.caffeineMg * multiplier) : null,
-    confidence: match.confidence,
+    confidence,
   };
 }
 
@@ -342,13 +430,21 @@ function parseOneSegment(segment: string): ParsedFoodItem {  const { quantity, u
  * food list (foodDatabase.ts). A segment that matches nothing gets a low-confidence
  * placeholder rather than a fabricated precise number — a real, if simple, working
  * parser (not a stub), same approach as health-tracker's MockNutritionProvider.
+ *
+ * `customEntries` — the user's own added/edited foods (persisted in IndexedDB via
+ * customFoodRepository, not this file) — are checked AHEAD of the built-in database,
+ * so a custom entry with the same alias as a built-in one (e.g. a corrected "ribeye
+ * steak") overrides it rather than just adding a duplicate match candidate. This
+ * function stays a pure, no-I/O calculation either way — the caller loads
+ * `customEntries` from storage and passes them in.
  */
-export function parseNutritionText(rawText: string): ParsedFoodItem[] {
+export function parseNutritionText(rawText: string, customEntries: FoodDatabaseEntry[] = []): ParsedFoodItem[] {
+  const database = [...customEntries, ...FOOD_DATABASE];
   const segments = rawText
     .split(SEGMENT_SPLIT_REGEX)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
-    .flatMap((segment) => splitSegmentOnWith(segment));
+    .flatMap((segment) => splitSegmentOnWith(segment, database));
 
-  return segments.map((segment) => parseOneSegment(segment));
+  return segments.map((segment) => parseOneSegment(segment, database));
 }
