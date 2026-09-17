@@ -64,6 +64,7 @@ export function SettingsScreen() {
   const [strongSummary, setStrongSummary] = useState<StrongImportSummary | null>(null);
   const [strongError, setStrongError] = useState<string | null>(null);
   const [strongBusy, setStrongBusy] = useState(false);
+  const [pastedStrongText, setPastedStrongText] = useState("");
 
   const [backupMessage, setBackupMessage] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -127,6 +128,25 @@ export function SettingsScreen() {
     } finally {
       setStrongBusy(false);
       e.target.value = "";
+    }
+  }
+
+  // Pasting the export as text is often easier than a file on a phone — Strong's
+  // share sheet has no direct "save to Files" step, but Copy works everywhere.
+  async function handleStrongPastedText() {
+    const text = pastedStrongText.trim();
+    if (!text) return;
+    setStrongBusy(true);
+    setStrongError(null);
+    setStrongSummary(null);
+    try {
+      const summary = await importStrongCsv(text);
+      setStrongSummary(summary);
+      setPastedStrongText("");
+    } catch (err) {
+      setStrongError(err instanceof Error ? err.message : "Import failed.");
+    } finally {
+      setStrongBusy(false);
     }
   }
 
@@ -430,10 +450,32 @@ export function SettingsScreen() {
 
       <Card>
         <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Strong CSV import</h2>
-        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-          Export your workout history from the Strong app as a CSV file, then select it here.
+               <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+          Export your workout history from the Strong app, then select the CSV file here or
+          paste the exported text directly below.
         </p>
         <input type="file" accept=".csv" onChange={handleStrongFile} disabled={strongBusy} className="text-sm" />
+        <div className="my-2 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+          or paste the exported text
+          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+        </div>
+        <textarea
+          className="w-full rounded border border-slate-200 bg-transparent p-2 text-xs dark:border-slate-700"
+          rows={4}
+          placeholder="Paste your Strong export here (Strong app → Settings → Export Data → Copy, or paste a .csv file's contents)"
+          value={pastedStrongText}
+          onChange={(e) => setPastedStrongText(e.target.value)}
+          disabled={strongBusy}
+        />
+        <button
+          type="button"
+          className="mt-2 rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+          onClick={() => void handleStrongPastedText()}
+          disabled={strongBusy || pastedStrongText.trim().length === 0}
+        >
+          Import pasted text
+        </button>
         {strongBusy && <p className="mt-2 text-sm text-slate-400">Importing…</p>}
         {strongError && <p className="mt-2 text-sm text-red-600">{strongError}</p>}
         {strongSummary && (
