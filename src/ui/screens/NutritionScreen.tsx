@@ -10,11 +10,13 @@ import { toIsoDate } from "../../domain/dateUtils";
 import {
   foodEntryRepository,
   dailyMetricsRepository,
+  customFoodRepository,
   getFoodEntriesForDate,
   getFoodEntriesInRange,
   getMostRecentCycle,
 } from "../../storage/repositories";
 import type { FoodEntry, ParsedFoodItem } from "../../storage/schemas/nutrition";
+import type { CustomFood } from "../../storage/schemas/customFood";
 import { parseNutritionText } from "../../integrations/nutrition/nutritionParser";
 import { BARCODE_DATABASE } from "../../integrations/nutrition/barcodeDatabase";
 import type { BarcodeFoodEntry } from "../../integrations/nutrition/barcodeDatabase";
@@ -38,6 +40,54 @@ interface ReviewItem {
 }
 
 type EditableNumberField = "calories" | "proteinG" | "carbsG" | "fatG" | "fiberG";
+
+interface CustomFoodFormState {
+  name: string;
+  /** Comma-separated in the form, split into an array on save. */
+  aliases: string;
+  servingDescription: string;
+  calories: string;
+  proteinG: string;
+  carbsG: string;
+  fatG: string;
+  fiberG: string;
+  addedSugarG: string;
+  totalSugarG: string;
+  caffeineMg: string;
+  confidence: "high" | "medium";
+}
+
+const EMPTY_CUSTOM_FOOD_FORM: CustomFoodFormState = {
+  name: "",
+  aliases: "",
+  servingDescription: "",
+  calories: "",
+  proteinG: "",
+  carbsG: "",
+  fatG: "",
+  fiberG: "",
+  addedSugarG: "",
+  totalSugarG: "",
+  caffeineMg: "",
+  confidence: "medium",
+};
+
+function customFoodToFormState(food: CustomFood): CustomFoodFormState {
+  return {
+    name: food.name,
+    aliases: food.aliases.join(", "),
+    servingDescription: food.servingDescription,
+    calories: String(food.calories),
+    proteinG: String(food.proteinG),
+    carbsG: String(food.carbsG),
+    fatG: String(food.fatG),
+    fiberG: String(food.fiberG),
+    addedSugarG: food.addedSugarG != null ? String(food.addedSugarG) : "",
+    totalSugarG: food.totalSugarG != null ? String(food.totalSugarG) : "",
+    caffeineMg: food.caffeineMg != null ? String(food.caffeineMg) : "",
+    confidence: food.confidence,
+  };
+}
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
@@ -100,6 +150,11 @@ export function NutritionScreen() {
   const [barcodeSearchedText, setBarcodeSearchedText] = useState<string | null>(null);
   const [barcodeMatch, setBarcodeMatch] = useState<BarcodeFoodEntry | null>(null);
 
+  const [foodFormOpen, setFoodFormOpen] = useState(false);
+  const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
+  const [foodForm, setFoodForm] = useState<CustomFoodFormState>(EMPTY_CUSTOM_FOOD_FORM);
+
+  const customFoods = useLiveQuery(() => customFoodRepository.getAll(), []);
   const todaysEntries = useLiveQuery(() => getFoodEntriesForDate(today), [today]);
   const lastEntry = useLiveQuery(() => getLastFoodEntry(), [today]);
   const frequentMeals = useLiveQuery(() => getFrequentMeals(), [today]);
@@ -155,9 +210,63 @@ export function NutritionScreen() {
   function handleParse() {
     const text = quickAddText.trim();
     if (!text) return;
-    const parsed = parseNutritionText(text);
+    const parsed = parseNutritionText(text, customFoods ?? []);
     setReviewItems(parsed.map((item) => ({ base: item, portion: 1, current: item })));
     setParsedRawText(text);
+  }
+
+  function handleStartAddFood() {
+    setEditingFoodId(null);
+    setFoodForm(EMPTY_CUSTOM_FOOD_FORM);
+    setFoodFormOpen(true);
+  }
+
+  function handleStartEditFood(food: CustomFood) {
+    setEditingFoodId(food.id);
+    setFoodForm(customFoodToFormState(food));
+    setFoodFormOpen(true);
+  }
+
+  function handleCancelFoodForm() {
+    setFoodFormOpen(false);
+    setEditingFoodId(null);
+    setFoodForm(EMPTY_CUSTOM_FOOD_FORM);
+  }
+
+  async function handleSaveFood() {
+    const name = foodForm.name.trim();
+    const servingDescription = foodForm.servingDescription.trim();
+    const aliases = foodForm.aliases
+      .split(",")
+      .map((a) => a.trim().toLowerCase())
+      .filter((a) => a.length > 0);
+    if (!name || !servingDescription || aliases.length === 0) return;
+
+    const toNumber = (s: string) => (s.trim() === "" ? 0 : Number(s));
+    const toNullableNumber = (s: string) => (s.trim() === "" ? null : Number(s));
+    const existing = editingFoodId ? customFoods?.find((f) => f.id === editingFoodId) : undefined;
+
+    await customFoodRepository.put({
+      id: editingFoodId ?? uuid(),
+      name,
+      aliases,
+      servingDescription,
+      calories: toNumber(foodForm.calories),
+      proteinG: toNumber(foodForm.proteinG),
+      carbsG: toNumber(foodForm.carbsG),
+      fatG: toNumber(foodForm.fatG),
+      fiberG: toNumber(foodForm.fiberG),
+      addedSugarG: toNullableNumber(foodForm.addedSugarG),
+      totalSugarG: toNullableNumber(foodForm.totalSugarG),
+      caffeineMg: toNullableNumber(foodForm.caffeineMg),
+      confidence: foodForm.confidence,
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+    });
+    handleCancelFoodForm();
+  }
+
+  async function handleDeleteCustomFood(id: string) {
+    await customFoodRepository.delete(id);
   }
 
   function handleCancelReview() {
@@ -414,6 +523,188 @@ export function NutritionScreen() {
             </div>
           )}
         </div>
+      </Card>
+
+      <Card>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Custom foods</h2>
+          {!foodFormOpen && (
+            <button
+              className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+              onClick={handleStartAddFood}
+            >
+              + Add a food
+            </button>
+          )}
+        </div>
+        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+          Add a food the quick-add parser doesn't recognize, or fix one that's wrong — these are checked before the
+          built-in list, so an entry here overrides a built-in food with the same name.
+        </p>
+
+        {foodFormOpen && (
+          <div className="mb-3 flex flex-col gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <label className="col-span-2 flex flex-col gap-0.5">
+                Name
+                <input
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.name}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </label>
+              <label className="col-span-2 flex flex-col gap-0.5">
+                Aliases (comma-separated words the parser should match, e.g. "ribeye, ribeye steak")
+                <input
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.aliases}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, aliases: e.target.value }))}
+                />
+              </label>
+              <label className="col-span-2 flex flex-col gap-0.5">
+                Serving description (e.g. "1 medium (200g)" or "100g cooked")
+                <input
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.servingDescription}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, servingDescription: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Calories
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.calories}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, calories: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Protein (g)
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.proteinG}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, proteinG: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Carbs (g)
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.carbsG}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, carbsG: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Fat (g)
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.fatG}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, fatG: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Fiber (g)
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.fiberG}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, fiberG: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Added sugar (g, optional)
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.addedSugarG}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, addedSugarG: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Total sugar (g, optional)
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.totalSugarG}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, totalSugarG: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Caffeine (mg, optional)
+                <input
+                  type="number"
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.caffeineMg}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, caffeineMg: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-0.5">
+                Confidence
+                <select
+                  className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+                  value={foodForm.confidence}
+                  onChange={(e) => setFoodForm((f) => ({ ...f, confidence: e.target.value as "high" | "medium" }))}
+                >
+                  <option value="high">High (single ingredient)</option>
+                  <option value="medium">Medium (composite/branded)</option>
+                </select>
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded-full border border-slate-200 px-3 py-1.5 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300"
+                onClick={handleCancelFoodForm}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-full bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                onClick={handleSaveFood}
+                disabled={
+                  foodForm.name.trim().length === 0 ||
+                  foodForm.servingDescription.trim().length === 0 ||
+                  foodForm.aliases.trim().length === 0
+                }
+              >
+                {editingFoodId ? "Save changes" : "Add food"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {customFoods && customFoods.length > 0 ? (
+          <div className="flex flex-col gap-1">
+            {customFoods.map((food) => (
+              <div
+                key={food.id}
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-2 text-sm dark:border-slate-700"
+              >
+                <div>
+                  <p className="font-medium text-slate-800 dark:text-slate-100">{food.name}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {food.servingDescription} &middot; {food.calories} kcal
+                  </p>
+                </div>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    className="text-slate-500 hover:text-accent dark:text-slate-400"
+                    onClick={() => handleStartEditFood(food)}
+                  >
+                    Edit
+                  </button>
+                  <button className="text-slate-400 hover:text-red-500" onClick={() => handleDeleteCustomFood(food.id)}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          !foodFormOpen && <p className="text-sm text-slate-500 dark:text-slate-400">No custom foods yet.</p>
+        )}
       </Card>
 
       <Card>
