@@ -42,22 +42,31 @@ function formatQuantity(q: number): string {
 function findFoodMatch(text: string, database: FoodDatabaseEntry[]): FoodDatabaseEntry | null {
   const normalized = text.toLowerCase().trim();
   const candidates = database.flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias })));
-  // Longest alias first, so a more specific multi-word alias (e.g. "greek yogurt")
-  // wins over a shorter one ("yogurt") that would otherwise match the same text. Ties
-  // (equal alias length) keep whatever order `database` put them in — callers rely on
-  // this to make custom/user-edited entries win over built-in ones with the same
-  // alias, by listing custom entries first (Array.prototype.sort is stable).
-  candidates.sort((a, b) => b.alias.length - a.alias.length);
+
+  // Collect every alias that actually appears (whole-word, not a bare substring check —
+  // otherwise short aliases false-match inside unrelated words: "tea" inside "steak"/
+  // "steamed", "corn" inside "popcorn", "egg" inside "eggplant". A trailing e?s?
+  // tolerates common English plurals without listing every one as a separate alias),
+  // rather than stopping at the first one found.
+  const matches: { entry: FoodDatabaseEntry; alias: string; endIndex: number }[] = [];
   for (const { entry, alias } of candidates) {
-    // Whole-word match, not a bare substring check — otherwise short aliases false-
-    // match inside unrelated words ("tea" inside "steak"/"steamed", "corn" inside
-    // "popcorn", "egg" inside "eggplant"). A trailing e?s? tolerates common English
-    // plurals ("banana"/"bananas", "tomato"/"tomatoes") without listing every one as
-    // a separate alias.
     const pattern = new RegExp(`\\b${escapeRegExp(alias)}e?s?\\b`, "i");
-    if (pattern.test(normalized)) return entry;
+    const match = pattern.exec(normalized);
+    if (match) matches.push({ entry, alias, endIndex: match.index + match[0].length });
   }
-  return null;
+  if (matches.length === 0) return null;
+
+  // Prefer whichever match ends CLOSEST TO THE END of the text, tie-broken by the
+  // longer alias. English food phrases put the head noun last ("banana blueberry
+  // smoothie," "chicken caesar salad") — earlier words are usually just descriptors
+  // already priced into that dish's reference, not separate foods. Without this, a
+  // segment naming both an ingredient and the prepared dish it's IN (e.g. "smoothie"
+  // vs. its own "blueberry") picked whichever alias STRING happened to be longer,
+  // regardless of which one the phrase was actually about — "banana blueberry
+  // smoothie" matched "blueberry" (9 letters) over "smoothie" (8), logging a fruit
+  // smoothie as if it were a plain cup of blueberries.
+  matches.sort((a, b) => b.endIndex - a.endIndex || b.alias.length - a.alias.length);
+  return matches[0]!.entry;
 }
 
 /**
