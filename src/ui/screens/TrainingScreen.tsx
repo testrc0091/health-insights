@@ -350,6 +350,7 @@ export function TrainingScreen() {
   // ---- Strong CSV importer ----
   const [importSummary, setImportSummary] = useState<StrongImportSummary | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [pastedCsvText, setPastedCsvText] = useState("");
 
   async function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -361,6 +362,22 @@ export function TrainingScreen() {
       const text = await readFileAsText(file);
       const summary = await importStrongCsv(text);
       setImportSummary(summary);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Import failed.");
+    }
+  }
+
+  // Pasting the export as text is often easier than a file on a phone — Strong's
+  // share sheet has no direct "save to Files" step, but Copy works everywhere.
+  async function handleImportPastedText() {
+    const text = pastedCsvText.trim();
+    if (!text) return;
+    setImportError(null);
+    setImportSummary(null);
+    try {
+      const summary = await importStrongCsv(text);
+      setImportSummary(summary);
+      setPastedCsvText("");
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Import failed.");
     }
@@ -662,6 +679,25 @@ export function TrainingScreen() {
       <Card>
         <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Import from Strong</h2>
         <input type="file" accept=".csv" onChange={(e) => void handleImportFile(e)} className="text-sm" />
+        <div className="my-2 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+          or paste the exported text
+          <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+        </div>
+        <textarea
+          className="w-full rounded border border-slate-200 bg-transparent p-2 text-xs dark:border-slate-700"
+          rows={4}
+          placeholder="Paste your Strong export here (Strong app → Settings → Export Data → Copy, or paste a .csv file's contents)"
+          value={pastedCsvText}
+          onChange={(e) => setPastedCsvText(e.target.value)}
+        />
+        <button
+          className="mt-2 rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+          onClick={() => void handleImportPastedText()}
+          disabled={pastedCsvText.trim().length === 0}
+        >
+          Import pasted text
+        </button>
         {importSummary && (
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
             Added {importSummary.workoutsAdded}, skipped {importSummary.workoutsSkippedAsDuplicate} duplicate(s).
