@@ -1,5 +1,6 @@
 import {
   bodyMeasurementRepository,
+  customFoodRepository,
   dailyMetricsRepository,
   foodEntryRepository,
   insightRepository,
@@ -36,6 +37,7 @@ export interface BackupPayload {
   menstrualCycleEntries: unknown[];
   insights: unknown[];
   weeklyReports: unknown[];
+  customFoods: unknown[];
 }
 
 /**
@@ -64,6 +66,7 @@ export async function exportBackup(): Promise<BackupPayload> {
     menstrualCycleEntries,
     insights,
     weeklyReports,
+    customFoods,
   ] = await Promise.all([
     userProfileRepository.getAll(),
     dailyMetricsRepository.getAll(),
@@ -80,6 +83,7 @@ export async function exportBackup(): Promise<BackupPayload> {
     menstrualCycleEntryRepository.getAll(),
     insightRepository.getAll(),
     weeklyReportRepository.getAll(),
+    customFoodRepository.getAll(),
   ]);
 
   return {
@@ -100,6 +104,7 @@ export async function exportBackup(): Promise<BackupPayload> {
     menstrualCycleEntries,
     insights,
     weeklyReports,
+    customFoods,
   };
 }
 
@@ -128,5 +133,6 @@ export async function importBackup(payload: BackupPayload): Promise<void> {
     bulkPutIfAny(menstrualCycleEntryRepository, payload.menstrualCycleEntries as never[]),
     bulkPutIfAny(insightRepository, payload.insights as never[]),
     bulkPutIfAny(weeklyReportRepository, payload.weeklyReports as never[]),
+    bulkPutIfAny(customFoodRepository, (payload.customFoods ?? []) as never[]),
   ]);
 }
