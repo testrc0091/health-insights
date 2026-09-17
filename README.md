@@ -76,7 +76,6 @@ devices, since nothing syncs automatically.
   it's not going to match arbitrary phrasing as well as an LLM would. This was a
   deliberate choice (no API key to manage, nothing ever leaves your device).
 - **No live Apple Health access.** See above — manual export import only.
-- **No camera barcode scanning.** Barcode lookup is a small manual-entry starter list;
   scanning would require an added camera/scanning library.
 - **No cross-device sync.** Data lives in this browser's IndexedDB on this device.
   Use the JSON backup/restore to move data between devices — there's no server to sync
