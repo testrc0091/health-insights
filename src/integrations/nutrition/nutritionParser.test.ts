@@ -190,6 +190,17 @@ describe("parseNutritionText", () => {
     expect(oneTbsp!.calories).toBeCloseTo(94, 0);
   });
 
+  it("matches a multi-ingredient smoothie to the smoothie entry, not its last-mentioned fruit", () => {
+    // Regression: "banana blueberry smoothie" used to match "blueberry" (9 letters)
+    // over "smoothie" (8 letters) purely because it's a longer alias string, logging
+    // a fruit smoothie as a plain cup of blueberries (84 kcal instead of the
+    // smoothie's own 200 kcal reference). The head noun of a food phrase is usually
+    // the LAST word, so the match closest to the end of the text should win.
+    const [item] = parseNutritionText("banana blueberry smoothie");
+    expect(item!.name).toContain("smoothie");
+    expect(item!.calories).toBeCloseTo(200, 0);
+  });
+
   // --- User-editable custom foods (added/edited from the Nutrition screen, persisted
   // in IndexedDB by the caller, never by this file - see customFoodRepository).
 
