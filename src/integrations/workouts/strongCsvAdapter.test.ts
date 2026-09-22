@@ -16,6 +16,14 @@ describe("parseStrongCsv", () => {
     expect(strengthWorkouts[0]!.exercises[0]!.sets).toHaveLength(2);
   });
 
+  it("carries the CSV's Workout Name column through as the workout's label", () => {
+    // Populated for heart-rate-by-split trends - a "Push Day" export should be
+    // groupable as "Push Day," not silently dropped on the floor.
+    const csv = [CSV_HEADER, '2026-09-20 10:00:00,Push Day,45m,Bench Press,1,135,10,,,,,'].join("\n");
+    const { workouts } = parseStrongCsv(csv);
+    expect(workouts[0]!.label).toBe("Push Day");
+  });
+
   it("warns instead of throwing when the header doesn't look like a Strong export", () => {
     const { workouts, warnings } = parseStrongCsv("not,a,strong,export\n1,2,3,4");
     expect(workouts).toEqual([]);
@@ -93,6 +101,11 @@ https://link.strong.app/rdpauyva`;
     // into the workout-level notes, prefixed with which exercise it followed.
     expect(workouts[0]!.notes).toContain("Romanian Deadlift");
     expect(workouts[0]!.notes).toContain("Grip issue");
+
+    // The share text's title line ("Glutes") becomes the workout's label, the same
+    // way the CSV parser's "Workout Name" column does - both feed the heart-rate-by-
+    // split trend chart, so a share-text import needs to carry it too.
+    expect(workouts[0]!.label).toBe("Glutes");
   });
 
   it("parses the share text's date correctly regardless of the runtime's Date parser leniency", () => {
