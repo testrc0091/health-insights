@@ -20,12 +20,11 @@ import { PageHeader } from "../components/PageHeader";
 import { ConfidenceBadge } from "../components/ConfidenceBadge";
 import {
   workoutRepository,
-  strengthWorkoutRepository,
   volleyballSessionRepository,
   getWorkoutsInRange,
   getUserProfileOrDefault,
 } from "../../storage/repositories";
-import type { StrengthExercise, VolleyballSession, Workout } from "../../storage/schemas/workout";
+import type { VolleyballSession, Workout } from "../../storage/schemas/workout";
 import { getWeeklyTrainingLoad, detectPrs, type PrCandidate } from "../../app/services/trainingService";
 import { estimateVolleyballCalories } from "../../domain/training/volleyballModel";
 import { importStrongCsv, type StrongImportSummary } from "../../app/services/strongImportService";
@@ -36,9 +35,6 @@ const inputClass =
 const labelClass = "mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400";
 const primaryButtonClass =
   "rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-50";
-const secondaryButtonClass =
-  "rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 dark:border-slate-700 dark:text-slate-300";
-const removeLinkClass = "text-xs font-medium text-accent underline";
 
 const GOAL_EXERCISES_STORAGE_KEY = "trainingGoalExercises";
 const VOLLEYBALL_HR_COLOR = "#ec4899";
@@ -49,26 +45,6 @@ function parseNullableNumber(raw: string): number | null {
   if (trimmed === "") return null;
   const n = Number(trimmed);
   return Number.isFinite(n) ? n : null;
-}
-
-interface SetRow {
-  key: string;
-  weightLb: string;
-  reps: string;
-  rir: string;
-  rpe: string;
-}
-interface ExerciseBlock {
-  key: string;
-  name: string;
-  sets: SetRow[];
-}
-
-function makeSetRow(): SetRow {
-  return { key: uuid(), weightLb: "", reps: "", rir: "", rpe: "" };
-}
-function makeExerciseBlock(): ExerciseBlock {
-  return { key: uuid(), name: "", sets: [makeSetRow()] };
 }
 
 function loadGoalExercises(): string[] {
@@ -131,99 +107,6 @@ export function TrainingScreen() {
         { name: "Impact", value: Math.round(weeklyLoad.highImpactLoad * 10) / 10 },
       ]
     : [];
-
-  // ---- Strength logging form ----
-  const [strengthDuration, setStrengthDuration] = useState("45");
-  const [strengthAvgHr, setStrengthAvgHr] = useState("");
-  const [strengthLabel, setStrengthLabel] = useState("");
-  const [exercises, setExercises] = useState<ExerciseBlock[]>([makeExerciseBlock()]);
-  const [strengthMessage, setStrengthMessage] = useState<string | null>(null);
-
-  function addExercise() {
-    setExercises((prev) => [...prev, makeExerciseBlock()]);
-  }
-  function removeExercise(key: string) {
-    setExercises((prev) => (prev.length > 1 ? prev.filter((e) => e.key !== key) : prev));
-  }
-  function updateExerciseName(key: string, name: string) {
-    setExercises((prev) => prev.map((e) => (e.key === key ? { ...e, name } : e)));
-  }
-  function addSet(exerciseKey: string) {
-    setExercises((prev) =>
-      prev.map((e) => (e.key === exerciseKey ? { ...e, sets: [...e.sets, makeSetRow()] } : e)),
-    );
-  }
-  function removeSet(exerciseKey: string, setKey: string) {
-    setExercises((prev) =>
-      prev.map((e) =>
-        e.key === exerciseKey && e.sets.length > 1
-          ? { ...e, sets: e.sets.filter((s) => s.key !== setKey) }
-          : e,
-      ),
-    );
-  }
-  function updateSetField(exerciseKey: string, setKey: string, field: keyof Omit<SetRow, "key">, value: string) {
-    setExercises((prev) =>
-      prev.map((e) =>
-        e.key === exerciseKey
-          ? { ...e, sets: e.sets.map((s) => (s.key === setKey ? { ...s, [field]: value } : s)) }
-          : e,
-      ),
-    );
-  }
-
-  async function handleSaveStrength() {
-    const strengthExercises: StrengthExercise[] = exercises
-      .filter((e) => e.name.trim() !== "")
-      .map((e, exIndex) => ({
-        id: uuid(),
-        name: e.name.trim(),
-        orderIndex: exIndex,
-        sets: e.sets.map((s, setIndex) => ({
-          id: uuid(),
-          orderIndex: setIndex,
-          weightLb: parseNullableNumber(s.weightLb),
-          reps: parseNullableNumber(s.reps),
-          rir: parseNullableNumber(s.rir),
-          rpe: parseNullableNumber(s.rpe),
-          restSeconds: null,
-          isPr: false,
-        })),
-      }));
-
-    if (strengthExercises.length === 0) {
-      setStrengthMessage("Add at least one exercise name before saving.");
-      return;
-    }
-
-    const workoutId = uuid();
-    const workout: Workout = {
-      id: workoutId,
-      source: "manual",
-      sourceWorkoutId: null,
-      label: strengthLabel.trim() || null,
-      workoutType: "strength",
-      startTime: new Date().toISOString(),
-      endTime: null,
-      durationMinutes: parseNullableNumber(strengthDuration) ?? 0,
-      activeCaloriesKcal: null,
-      totalCaloriesKcal: null,
-      averageHeartRate: parseNullableNumber(strengthAvgHr),
-      maxHeartRate: null,
-      hrZones: null,
-      perceivedExertion: null,
-      notes: null,
-    };
-
-    await workoutRepository.put(workout);
-    await strengthWorkoutRepository.put({ workoutId, exercises: strengthExercises });
-
-    setExercises([makeExerciseBlock()]);
-    setStrengthDuration("45");
-    setStrengthAvgHr("");
-    setStrengthLabel("");
-    setStrengthMessage("Workout saved.");
-  }
 
   // ---- PR detection ----
   const prCandidates = useLiveQuery(async () => {
@@ -401,6 +284,9 @@ export function TrainingScreen() {
   const [importSummary, setImportSummary] = useState<StrongImportSummary | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [pastedCsvText, setPastedCsvText] = useState("");
+  // Strong doesn't export heart rate at all (CSV or share text) - typed in here instead
+  // and applied to whatever gets imported, since it's usually one session at a time.
+  const [importAvgHr, setImportAvgHr] = useState("");
 
   async function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -410,8 +296,9 @@ export function TrainingScreen() {
     setImportSummary(null);
     try {
       const text = await readFileAsText(file);
-      const summary = await importStrongCsv(text);
+      const summary = await importStrongCsv(text, parseNullableNumber(importAvgHr));
       setImportSummary(summary);
+      setImportAvgHr("");
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Import failed.");
     }
@@ -425,9 +312,10 @@ export function TrainingScreen() {
     setImportError(null);
     setImportSummary(null);
     try {
-      const summary = await importStrongCsv(text);
+      const summary = await importStrongCsv(text, parseNullableNumber(importAvgHr));
       setImportSummary(summary);
       setPastedCsvText("");
+      setImportAvgHr("");
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Import failed.");
     }
@@ -530,144 +418,10 @@ export function TrainingScreen() {
           </div>
         ) : (
           <p className="text-sm text-slate-400">
-            No labeled strength workouts with heart rate yet — add a "Workout label" (e.g. Push, Pull, Glutes,
-            Quads) and an avg heart rate when logging below, or import a Strong export (which already names each
-            workout).
+            No labeled strength workouts with heart rate yet — import a Strong export below (it already names each
+            workout, and you can enter an avg heart rate alongside the import since Strong doesn't export one).
           </p>
         )}
-      </Card>
-
-      {/* Strength logging form */}
-      <Card>
-        <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Log strength workout</h2>
-        <div className="mb-3">
-          <label className={labelClass}>Workout label (optional — e.g. Push, Pull, Glutes, Quads)</label>
-          <input
-            type="text"
-            list="strength-label-suggestions"
-            className={inputClass}
-            value={strengthLabel}
-            onChange={(e) => setStrengthLabel(e.target.value)}
-          />
-          <datalist id="strength-label-suggestions">
-            <option value="Push" />
-            <option value="Pull" />
-            <option value="Legs" />
-            <option value="Glutes" />
-            <option value="Quads" />
-            <option value="Upper" />
-            <option value="Lower" />
-            <option value="Full Body" />
-          </datalist>
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            Used to group the heart rate trend chart below by training split.
-          </p>
-        </div>
-        <div className="mb-3 grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Session duration (minutes)</label>
-            <input
-              type="number"
-              className={inputClass}
-              value={strengthDuration}
-              onChange={(e) => setStrengthDuration(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Avg heart rate (bpm, optional)</label>
-            <input
-              type="number"
-              className={inputClass}
-              value={strengthAvgHr}
-              onChange={(e) => setStrengthAvgHr(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {exercises.map((exercise, exIndex) => (
-            <div key={exercise.key} className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-              <div className="mb-2 flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder={`Exercise ${exIndex + 1} name`}
-                  className={inputClass}
-                  value={exercise.name}
-                  onChange={(e) => updateExerciseName(exercise.key, e.target.value)}
-                />
-                {exercises.length > 1 && (
-                  <button type="button" className={removeLinkClass} onClick={() => removeExercise(exercise.key)}>
-                    Remove
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                {exercise.sets.map((set, setIndex) => (
-                  <div key={set.key} className="grid grid-cols-5 items-center gap-1">
-                    <span className="text-xs text-slate-400">#{setIndex + 1}</span>
-                    <input
-                      type="number"
-                      placeholder="lb"
-                      className={inputClass}
-                      value={set.weightLb}
-                      onChange={(e) => updateSetField(exercise.key, set.key, "weightLb", e.target.value)}
-                    />
-                    <input
-                      type="number"
-                      placeholder="reps"
-                      className={inputClass}
-                      value={set.reps}
-                      onChange={(e) => updateSetField(exercise.key, set.key, "reps", e.target.value)}
-                    />
-                    <input
-                      type="number"
-                      placeholder="RIR"
-                      className={inputClass}
-                      value={set.rir}
-                      onChange={(e) => updateSetField(exercise.key, set.key, "rir", e.target.value)}
-                    />
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="number"
-                        placeholder="RPE"
-                        className={inputClass}
-                        value={set.rpe}
-                        onChange={(e) => updateSetField(exercise.key, set.key, "rpe", e.target.value)}
-                      />
-                      {exercise.sets.length > 1 && (
-                        <button
-                          type="button"
-                          className="text-xs text-slate-400"
-                          onClick={() => removeSet(exercise.key, set.key)}
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="mt-2 text-xs font-medium text-accent underline"
-                onClick={() => addSet(exercise.key)}
-              >
-                + Add set
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <button type="button" className={secondaryButtonClass} onClick={addExercise}>
-            + Add exercise
-          </button>
-          <button type="button" className={primaryButtonClass} onClick={() => void handleSaveStrength()}>
-            Save workout
-          </button>
-        </div>
-        {strengthMessage && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{strengthMessage}</p>}
       </Card>
 
       {/* PR list */}
@@ -821,6 +575,19 @@ export function TrainingScreen() {
       {/* Strong CSV import */}
       <Card>
         <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Import from Strong</h2>
+        <div className="mb-3">
+          <label className={labelClass}>Avg heart rate (bpm, optional)</label>
+          <input
+            type="number"
+            className={inputClass}
+            value={importAvgHr}
+            onChange={(e) => setImportAvgHr(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            Strong doesn't export heart rate, so enter it here — applied to whatever this import adds. Feeds the
+            heart rate trend charts above.
+          </p>
+        </div>
         <input type="file" accept=".csv" onChange={(e) => void handleImportFile(e)} className="text-sm" />
         <div className="my-2 flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
           <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
