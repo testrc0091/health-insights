@@ -3,7 +3,18 @@ import type { ChangeEvent } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { v4 as uuid } from "uuid";
 import { startOfWeek, endOfWeek, subDays, format as formatDateLabel } from "date-fns";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  Legend,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 import { Card } from "../components/Card";
 import { PageHeader } from "../components/PageHeader";
 import { ConfidenceBadge } from "../components/ConfidenceBadge";
@@ -30,6 +41,8 @@ const secondaryButtonClass =
 const removeLinkClass = "text-xs font-medium text-accent underline";
 
 const GOAL_EXERCISES_STORAGE_KEY = "trainingGoalExercises";
+const VOLLEYBALL_HR_COLOR = "#ec4899";
+const STRENGTH_LABEL_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#ec4899"];
 
 function parseNullableNumber(raw: string): number | null {
   const trimmed = raw.trim();
@@ -121,6 +134,8 @@ export function TrainingScreen() {
 
   // ---- Strength logging form ----
   const [strengthDuration, setStrengthDuration] = useState("45");
+  const [strengthAvgHr, setStrengthAvgHr] = useState("");
+  const [strengthLabel, setStrengthLabel] = useState("");
   const [exercises, setExercises] = useState<ExerciseBlock[]>([makeExerciseBlock()]);
   const [strengthMessage, setStrengthMessage] = useState<string | null>(null);
 
@@ -186,13 +201,14 @@ export function TrainingScreen() {
       id: workoutId,
       source: "manual",
       sourceWorkoutId: null,
+      label: strengthLabel.trim() || null,
       workoutType: "strength",
       startTime: new Date().toISOString(),
       endTime: null,
       durationMinutes: parseNullableNumber(strengthDuration) ?? 0,
       activeCaloriesKcal: null,
       totalCaloriesKcal: null,
-      averageHeartRate: null,
+      averageHeartRate: parseNullableNumber(strengthAvgHr),
       maxHeartRate: null,
       hrZones: null,
       perceivedExertion: null,
@@ -204,6 +220,8 @@ export function TrainingScreen() {
 
     setExercises([makeExerciseBlock()]);
     setStrengthDuration("45");
+    setStrengthAvgHr("");
+    setStrengthLabel("");
     setStrengthMessage("Workout saved.");
   }
 
@@ -228,6 +246,37 @@ export function TrainingScreen() {
     }
     return Array.from(map.entries());
   }, [prCandidates]);
+
+  // ---- Heart rate trends ----
+  const hrTrendWorkouts = useLiveQuery(async () => {
+    const start = subDays(new Date(), 365).toISOString();
+    const end = new Date().toISOString();
+    const workouts = await getWorkoutsInRange(start, end);
+    return workouts
+      .filter((w) => w.averageHeartRate != null)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, []);
+
+  const volleyballHrTrend = useMemo(() => {
+    return (hrTrendWorkouts ?? [])
+      .filter((w) => w.workoutType === "volleyball")
+      .map((w) => ({ date: formatDateLabel(new Date(w.startTime), "MMM d"), avgHr: w.averageHeartRate! }));
+  }, [hrTrendWorkouts]);
+
+  // Each strength workout is its own row with only ITS OWN label's key set - Recharts'
+  // connectNulls (set on each <Line> below) draws a continuous trend for that split
+  // straight through the other splits' rows, rather than a broken line or bare dots.
+  const strengthHrTrend = useMemo(() => {
+    const points = (hrTrendWorkouts ?? []).filter(
+      (w): w is typeof w & { label: string } => w.workoutType === "strength" && w.label != null,
+    );
+    const labels = Array.from(new Set(points.map((w) => w.label)));
+    const rows: Record<string, string | number | null>[] = points.map((w) => ({
+      date: formatDateLabel(new Date(w.startTime), "MMM d"),
+      [w.label]: w.averageHeartRate,
+    }));
+    return { labels, rows };
+  }, [hrTrendWorkouts]);
 
   // ---- Goal exercises ----
   const [goalExercises, setGoalExercises] = useState<string[]>(() => loadGoalExercises());
@@ -298,6 +347,7 @@ export function TrainingScreen() {
       id: workoutId,
       source: "manual",
       sourceWorkoutId: null,
+      label: null,
       workoutType: "volleyball",
       startTime: new Date().toISOString(),
       endTime: null,
@@ -428,17 +478,110 @@ export function TrainingScreen() {
         </p>
       </Card>
 
+      {/* Heart rate trends */}
+      <Card>
+        <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          Volleyball heart rate (past year)
+        </h2>
+        {volleyballHrTrend.length > 0 ? (
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={volleyballHrTrend}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-slate-100 dark:stroke-slate-800" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 12 }} width={30} domain={["dataMin - 5", "dataMax + 5"]} />
+                <Tooltip />
+                <Line type="monotone" dataKey="avgHr" name="Avg bpm" stroke={VOLLEYBALL_HR_COLOR} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            No volleyball sessions with heart rate logged yet — enter one in the Volleyball form below.
+          </p>
+        )}
+      </Card>
+
+      <Card>
+        <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          Strength heart rate by split (past year)
+        </h2>
+        {strengthHrTrend.rows.length > 0 ? (
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={strengthHrTrend.rows}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-slate-100 dark:stroke-slate-800" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 12 }} width={30} domain={["dataMin - 5", "dataMax + 5"]} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {strengthHrTrend.labels.map((label, i) => (
+                  <Line
+                    key={label}
+                    type="monotone"
+                    dataKey={label}
+                    stroke={STRENGTH_LABEL_COLORS[i % STRENGTH_LABEL_COLORS.length]}
+                    dot={{ r: 3 }}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-400">
+            No labeled strength workouts with heart rate yet — add a "Workout label" (e.g. Push, Pull, Glutes,
+            Quads) and an avg heart rate when logging below, or import a Strong export (which already names each
+            workout).
+          </p>
+        )}
+      </Card>
+
       {/* Strength logging form */}
       <Card>
         <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Log strength workout</h2>
         <div className="mb-3">
-          <label className={labelClass}>Session duration (minutes)</label>
+          <label className={labelClass}>Workout label (optional — e.g. Push, Pull, Glutes, Quads)</label>
           <input
-            type="number"
+            type="text"
+            list="strength-label-suggestions"
             className={inputClass}
-            value={strengthDuration}
-            onChange={(e) => setStrengthDuration(e.target.value)}
+            value={strengthLabel}
+            onChange={(e) => setStrengthLabel(e.target.value)}
           />
+          <datalist id="strength-label-suggestions">
+            <option value="Push" />
+            <option value="Pull" />
+            <option value="Legs" />
+            <option value="Glutes" />
+            <option value="Quads" />
+            <option value="Upper" />
+            <option value="Lower" />
+            <option value="Full Body" />
+          </datalist>
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            Used to group the heart rate trend chart below by training split.
+          </p>
+        </div>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass}>Session duration (minutes)</label>
+            <input
+              type="number"
+              className={inputClass}
+              value={strengthDuration}
+              onChange={(e) => setStrengthDuration(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Avg heart rate (bpm, optional)</label>
+            <input
+              type="number"
+              className={inputClass}
+              value={strengthAvgHr}
+              onChange={(e) => setStrengthAvgHr(e.target.value)}
+            />
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -722,8 +865,10 @@ export function TrainingScreen() {
                 <ul className="mt-1 space-y-0.5">
                   {workouts.map((w) => (
                     <li key={w.id} className="text-sm text-slate-700 dark:text-slate-200">
+                      {w.label ? `${w.label} — ` : ""}
                       {formatDateLabel(new Date(w.startTime), "MMM d, yyyy")} — {w.durationMinutes} min
                       {w.activeCaloriesKcal != null ? `, ${w.activeCaloriesKcal} kcal` : ""}
+                      {w.averageHeartRate != null ? `, avg ${w.averageHeartRate} bpm` : ""}
                     </li>
                   ))}
                 </ul>
