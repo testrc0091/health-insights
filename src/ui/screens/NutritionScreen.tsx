@@ -11,6 +11,7 @@ import {
   foodEntryRepository,
   dailyMetricsRepository,
   customFoodRepository,
+  photoBlobRepository,
   getFoodEntriesForDate,
   getFoodEntriesInRange,
   getMostRecentCycle,
@@ -91,6 +92,21 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
+interface ManualEntryFormState {
+  scope: "meal" | "day";
+  label: string;
+  date: string;
+  calories: string;
+  proteinG: string;
+  fiberG: string;
+  carbsG: string;
+  fatG: string;
+}
+
+function emptyManualEntryForm(today: string): ManualEntryFormState {
+  return { scope: "meal", label: "", date: today, calories: "", proteinG: "", fiberG: "", carbsG: "", fatG: "" };
+}
+
 /** Scales every numeric field of a parsed food item by `portion`, proportionally —
  * applied to a fresh copy of the ORIGINAL parse output each time so repeated portion
  * edits don't compound rounding error. */
@@ -147,6 +163,9 @@ export function NutritionScreen() {
   const [foodFormOpen, setFoodFormOpen] = useState(false);
   const [editingFoodId, setEditingFoodId] = useState<string | null>(null);
   const [foodForm, setFoodForm] = useState<CustomFoodFormState>(EMPTY_CUSTOM_FOOD_FORM);
+
+  const [manualForm, setManualForm] = useState<ManualEntryFormState>(() => emptyManualEntryForm(today));
+  const [manualPhotoFile, setManualPhotoFile] = useState<File | null>(null);
 
   const customFoods = useLiveQuery(() => customFoodRepository.getAll(), []);
   const todaysEntries = useLiveQuery(() => getFoodEntriesForDate(today), [today]);
@@ -207,6 +226,53 @@ export function NutritionScreen() {
     const parsed = parseNutritionText(text, customFoods ?? []);
     setReviewItems(parsed.map((item) => ({ base: item, portion: 1, current: item })));
     setParsedRawText(text);
+  }
+
+  async function handleSaveManualEntry() {
+    const caloriesText = manualForm.calories.trim();
+    if (!caloriesText) return;
+
+    const toNumber = (s: string) => (s.trim() === "" ? 0 : Number(s));
+    const toNullableNumber = (s: string) => (s.trim() === "" ? null : Number(s));
+
+    let photoBlobId: string | null = null;
+    if (manualPhotoFile) {
+      photoBlobId = uuid();
+      // The photo is stored as-is and never read — this app makes no network calls
+      // (ARCHITECTURE.md §7), so a screenshot from another app can only ever be kept
+      // for your own reference, not turned into numbers automatically.
+      await photoBlobRepository.put({ id: photoBlobId, blob: manualPhotoFile, createdAt: new Date().toISOString() });
+    }
+
+    const label = manualForm.label.trim() || (manualForm.scope === "day" ? "Manual day summary" : "Manual entry");
+    const item: ParsedFoodItem = {
+      name: label,
+      calories: toNumber(caloriesText),
+      calorieRangeLow: toNumber(caloriesText),
+      calorieRangeHigh: toNumber(caloriesText),
+      proteinG: toNumber(manualForm.proteinG),
+      carbsG: toNullableNumber(manualForm.carbsG),
+      fatG: toNullableNumber(manualForm.fatG),
+      fiberG: toNumber(manualForm.fiberG),
+      addedSugarG: null,
+      totalSugarG: null,
+      caffeineMg: null,
+      confidence: "high", // numbers you typed yourself, not a parser estimate
+    };
+
+    await foodEntryRepository.put({
+      id: uuid(),
+      timestamp: new Date(`${manualForm.date}T12:00:00`).toISOString(),
+      date: manualForm.date,
+      rawText: manualForm.label.trim() || null,
+      parsedFoods: [item],
+      source: "manual",
+      notes: null,
+      photoBlobId,
+    });
+
+    setManualForm(emptyManualEntryForm(today));
+    setManualPhotoFile(null);
   }
 
   function handleStartAddFood() {
@@ -299,6 +365,7 @@ export function NutritionScreen() {
       parsedFoods: reviewItems.map((r) => r.current),
       source: "manual",
       notes: null,
+      photoBlobId: null,
     });
     setReviewItems(null);
     setParsedRawText(null);
@@ -316,6 +383,7 @@ export function NutritionScreen() {
       parsedFoods: lastEntry.parsedFoods,
       source: lastEntry.source,
       notes: null,
+      photoBlobId: null,
     });
   }
 
@@ -449,6 +517,123 @@ export function NutritionScreen() {
             </div>
           </div>
         )}
+      </Card>
+
+      <Card>
+        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">Manual entry</h2>
+        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+          Already know the numbers — from another app's summary, a nutrition label, or your own count? Type them in
+          directly for one meal or a whole day. You can also attach a reference photo (e.g. a screenshot from
+          another tracking app) — it's stored for your own reference only, never read or analyzed automatically.
+        </p>
+        <div className="mb-2 flex gap-2">
+          <button
+            className={`rounded-full px-3 py-1 text-xs ${
+              manualForm.scope === "meal"
+                ? "bg-accent text-white"
+                : "border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+            }`}
+            onClick={() => setManualForm((f) => ({ ...f, scope: "meal" }))}
+          >
+            One meal
+          </button>
+          <button
+            className={`rounded-full px-3 py-1 text-xs ${
+              manualForm.scope === "day"
+                ? "bg-accent text-white"
+                : "border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300"
+            }`}
+            onClick={() => setManualForm((f) => ({ ...f, scope: "day" }))}
+          >
+            Whole day
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <label className="col-span-2 flex flex-col gap-0.5">
+            Label (optional)
+            <input
+              className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+              placeholder={manualForm.scope === "day" ? "e.g. Logged in MyFitnessPal" : "e.g. Lunch"}
+              value={manualForm.label}
+              onChange={(e) => setManualForm((f) => ({ ...f, label: e.target.value }))}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            Date
+            <input
+              type="date"
+              className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+              value={manualForm.date}
+              onChange={(e) => setManualForm((f) => ({ ...f, date: e.target.value }))}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            Calories
+            <input
+              type="number"
+              className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+              value={manualForm.calories}
+              onChange={(e) => setManualForm((f) => ({ ...f, calories: e.target.value }))}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            Protein (g)
+            <input
+              type="number"
+              className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+              value={manualForm.proteinG}
+              onChange={(e) => setManualForm((f) => ({ ...f, proteinG: e.target.value }))}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            Fiber (g)
+            <input
+              type="number"
+              className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+              value={manualForm.fiberG}
+              onChange={(e) => setManualForm((f) => ({ ...f, fiberG: e.target.value }))}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            Carbs (g, optional)
+            <input
+              type="number"
+              className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+              value={manualForm.carbsG}
+              onChange={(e) => setManualForm((f) => ({ ...f, carbsG: e.target.value }))}
+            />
+          </label>
+          <label className="flex flex-col gap-0.5">
+            Fat (g, optional)
+            <input
+              type="number"
+              className="rounded border border-slate-200 bg-transparent px-2 py-1 dark:border-slate-700"
+              value={manualForm.fatG}
+              onChange={(e) => setManualForm((f) => ({ ...f, fatG: e.target.value }))}
+            />
+          </label>
+        </div>
+        <label className="mt-2 block text-xs text-slate-500 dark:text-slate-400">
+          Attach a reference photo (optional)
+          <input
+            type="file"
+            accept="image/*"
+            className="mt-1 block text-xs"
+            onChange={(e) => setManualPhotoFile(e.target.files?.[0] ?? null)}
+          />
+        </label>
+        {manualPhotoFile && (
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Attached: {manualPhotoFile.name}</p>
+        )}
+        <div className="mt-2 flex justify-end">
+          <button
+            className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            onClick={() => void handleSaveManualEntry()}
+            disabled={manualForm.calories.trim().length === 0}
+          >
+            Log entry
+          </button>
+        </div>
       </Card>
 
       <Card>
