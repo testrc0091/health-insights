@@ -11,8 +11,14 @@ export interface StrongImportSummary {
  * a single workout's "Share" text (the app's Share button) — deduping by (source,
  * sourceWorkoutId) the same way as the Apple Health import — a fresh UUID is
  * generated per parse, so re-importing an overlapping export must not double every
- * session. */
-export async function importStrongCsv(csvText: string): Promise<StrongImportSummary> {
+ * session.
+ *
+ * `overrideAvgHr` — Strong doesn't include heart rate in either export format, so the
+ * UI collects it separately (typed in alongside the import) and applies it to every
+ * newly-added workout here. Safe to apply unconditionally: a freshly-parsed Strong
+ * workout's `averageHeartRate` is always null, never a real value this would clobber.
+ */
+export async function importStrongCsv(csvText: string, overrideAvgHr?: number | null): Promise<StrongImportSummary> {
   const { workouts, strengthWorkouts, warnings } = parseStrongExport(csvText);
 
   const existingWorkouts = await workoutRepository.getAll();
@@ -27,9 +33,11 @@ export async function importStrongCsv(csvText: string): Promise<StrongImportSumm
     .filter((i) => i >= 0);
   const newWorkouts = newIndexes.map((i) => workouts[i]!);
   const newStrengthWorkouts = newIndexes.map((i) => strengthWorkouts[i]!);
+  const workoutsToInsert =
+    overrideAvgHr != null ? newWorkouts.map((w) => ({ ...w, averageHeartRate: overrideAvgHr })) : newWorkouts;
 
-  if (newWorkouts.length > 0) {
-    await workoutRepository.bulkPut(newWorkouts);
+  if (workoutsToInsert.length > 0) {
+    await workoutRepository.bulkPut(workoutsToInsert);
     await strengthWorkoutRepository.bulkPut(newStrengthWorkouts);
   }
 
