@@ -122,6 +122,14 @@ function withPhotoBlobIdBackfilled(foodEntries: unknown[]): unknown[] {
   );
 }
 
+/** Same backward-compatibility concern as `photoBlobId` above, for `Workout.label` —
+ * a backup taken before that field existed would otherwise fail to restore. */
+function withWorkoutLabelBackfilled(workouts: unknown[]): unknown[] {
+  return workouts.map((entry) =>
+    entry && typeof entry === "object" && !("label" in entry) ? { ...entry, label: null } : entry,
+  );
+}
+
 /** Restores a JSON backup — every row goes back through its entity's Zod schema via
  * the repository's bulkPut (ARCHITECTURE.md §7: "an import is not a trusted
  * bulk-insert"). Existing rows sharing an id are overwritten; this is a merge/
@@ -130,7 +138,7 @@ export async function importBackup(payload: BackupPayload): Promise<void> {
   await Promise.all([
     bulkPutIfAny(userProfileRepository, payload.userProfile as never[]),
     bulkPutIfAny(dailyMetricsRepository, payload.dailyMetrics as never[]),
-    bulkPutIfAny(workoutRepository, payload.workouts as never[]),
+    bulkPutIfAny(workoutRepository, withWorkoutLabelBackfilled(payload.workouts) as never[]),
     bulkPutIfAny(strengthWorkoutRepository, payload.strengthWorkouts as never[]),
     bulkPutIfAny(volleyballSessionRepository, payload.volleyballSessions as never[]),
     bulkPutIfAny(nutritionDayRepository, payload.nutritionDays as never[]),
