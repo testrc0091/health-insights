@@ -112,6 +112,16 @@ async function bulkPutIfAny<T>(repo: { bulkPut: (items: T[]) => Promise<void> },
   if (items.length > 0) await repo.bulkPut(items);
 }
 
+/** A backup taken before `FoodEntry.photoBlobId` existed won't have that field at all
+ * — Zod requires it (nullable, not optional), so restoring an old backup as-is would
+ * fail every single food entry row. Backfilling `null` here keeps an old backup
+ * restorable rather than silently un-importable after this field was added. */
+function withPhotoBlobIdBackfilled(foodEntries: unknown[]): unknown[] {
+  return foodEntries.map((entry) =>
+    entry && typeof entry === "object" && !("photoBlobId" in entry) ? { ...entry, photoBlobId: null } : entry,
+  );
+}
+
 /** Restores a JSON backup — every row goes back through its entity's Zod schema via
  * the repository's bulkPut (ARCHITECTURE.md §7: "an import is not a trusted
  * bulk-insert"). Existing rows sharing an id are overwritten; this is a merge/
@@ -124,7 +134,7 @@ export async function importBackup(payload: BackupPayload): Promise<void> {
     bulkPutIfAny(strengthWorkoutRepository, payload.strengthWorkouts as never[]),
     bulkPutIfAny(volleyballSessionRepository, payload.volleyballSessions as never[]),
     bulkPutIfAny(nutritionDayRepository, payload.nutritionDays as never[]),
-    bulkPutIfAny(foodEntryRepository, payload.foodEntries as never[]),
+    bulkPutIfAny(foodEntryRepository, withPhotoBlobIdBackfilled(payload.foodEntries) as never[]),
     bulkPutIfAny(bodyMeasurementRepository, payload.bodyMeasurements as never[]),
     bulkPutIfAny(symptomEntryRepository, payload.symptomEntries as never[]),
     bulkPutIfAny(runSessionRepository, payload.runSessions as never[]),
