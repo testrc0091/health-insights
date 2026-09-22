@@ -37,5 +37,10 @@ export const foodEntrySchema = z.object({
   parsedFoods: z.array(parsedFoodItemSchema),
   source: z.enum(["manual", "restaurant_estimate", "packaged_nutrition", "photo", "ai_parsed"]),
   notes: z.string().nullable(),
+  /** An optional reference photo (e.g. a screenshot from another nutrition app's
+   * summary screen) stored via photoBlobRepository, never OCR'd or analyzed — this
+   * app never makes network calls (ARCHITECTURE.md §7), so a photo can only ever be
+   * kept for the user's own reference, not turned into numbers automatically. */
+  photoBlobId: z.string().nullable(),
 });
 export type FoodEntry = z.infer<typeof foodEntrySchema>;
