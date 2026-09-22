@@ -79,6 +79,7 @@ function parseWorkouts(doc: Document, warnings: string[]): Workout[] {
       // Apple exports don't carry a stable per-workout ID, so (startDate, type) is the
       // dedup key instead — two real sessions never share the exact same start second.
       sourceWorkoutId: `${startDateRaw}|${activityType}`,
+      label: null,
       workoutType: WORKOUT_TYPE_MAP[activityType] ?? "other",
       startTime: parseAppleDate(startDateRaw).toISOString(),
       endTime: endDateRaw ? parseAppleDate(endDateRaw).toISOString() : null,
