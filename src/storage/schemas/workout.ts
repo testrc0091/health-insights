@@ -5,6 +5,12 @@ export const workoutSchema = z.object({
   id: z.string().uuid(),
   source: z.enum(["apple_health", "strong", "manual"]),
   sourceWorkoutId: z.string().nullable(),
+  /** A human-named session label — "Push", "Glutes", "Quads" — distinct from
+   * `workoutType` (which is just the coarse strength/volleyball/run/other category).
+   * Populated from the Strong app's own workout name/title when imported (CSV's
+   * "Workout Name" column, or the share text's title line), or typed in manually;
+   * lets heart-rate/load trends be grouped by training split, not just by type. */
+  label: z.string().nullable(),
   workoutType: z.enum(["strength", "volleyball", "run", "other"]),
   startTime: z.string(),
   endTime: z.string().nullable(),
