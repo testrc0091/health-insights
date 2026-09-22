@@ -1,4 +1,4 @@
-import { parseStrongCsv } from "../../integrations/workouts/strongCsvAdapter";
+import { parseStrongExport } from "../../integrations/workouts/strongCsvAdapter";
 import { strengthWorkoutRepository, workoutRepository } from "../../storage/repositories";
 
 export interface StrongImportSummary {
@@ -7,11 +7,13 @@ export interface StrongImportSummary {
   warnings: string[];
 }
 
-/** Imports a Strong CSV export, deduping by (source, sourceWorkoutId) the same way as
- * the Apple Health import — a fresh UUID is generated per parse, so re-importing an
- * overlapping export must not double every session. */
+/** Imports a Strong export — either the full-history CSV (Settings → Export Data) or
+ * a single workout's "Share" text (the app's Share button) — deduping by (source,
+ * sourceWorkoutId) the same way as the Apple Health import — a fresh UUID is
+ * generated per parse, so re-importing an overlapping export must not double every
+ * session. */
 export async function importStrongCsv(csvText: string): Promise<StrongImportSummary> {
-  const { workouts, strengthWorkouts, warnings } = parseStrongCsv(csvText);
+  const { workouts, strengthWorkouts, warnings } = parseStrongExport(csvText);
 
   const existingWorkouts = await workoutRepository.getAll();
   const existingKeys = new Set(
