@@ -83,6 +83,7 @@ function buildWorkoutDraft(segment: InboxSegment): InboxDraft {
     id: uuid(),
     source: "manual",
     sourceWorkoutId: null,
+    label: null,
     workoutType: guessWorkoutType(segment.text),
     startTime: new Date().toISOString(),
     endTime: null,
