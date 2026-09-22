@@ -106,6 +106,7 @@ export function InboxScreen() {
           parsedFoods: draft.items,
           source: "manual",
           notes: null,
+          photoBlobId: null,
         });
         savedCount++;
       } else if (draft.kind === "workout") {
